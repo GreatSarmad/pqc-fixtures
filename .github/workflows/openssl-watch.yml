@@ -1,0 +1,77 @@
+name: OpenSSL watch
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: check OpenSSL 3.5.x pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the pin with upstream releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pinned="$(sed -n 's/^OPENSSL_VERSION=//p' scripts/openssl-pin.env)"
+          latest="$({
+            gh api --paginate 'repos/openssl/openssl/releases?per_page=100' \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
+          } | sed -n 's/^openssl-\(3\.5\.[0-9][0-9]*\)$/\1/p' | sort -V | tail -n 1)"
+
+          if [ -z "${pinned}" ] || [ -z "${latest}" ]; then
+            echo "Could not resolve both pinned and upstream OpenSSL versions" >&2
+            exit 1
+          fi
+
+          issue_title="OpenSSL 3.5.x update available"
+          issue_number="$(
+            gh issue list --repo "${GITHUB_REPOSITORY}" --state all --limit 100 \
+              --json number,title \
+              --jq "[.[] | select(.title == \"${issue_title}\")][0].number // \"\""
+          )"
+
+          newest="$(printf '%s\n%s\n' "${pinned}" "${latest}" | sort -V | tail -n 1)"
+          if [ "${pinned}" = "${latest}" ] || [ "${newest}" = "${pinned}" ]; then
+            echo "Pinned OpenSSL ${pinned} is current or ahead of latest stable 3.5.x (${latest})"
+            if [ -n "${issue_number}" ]; then
+              issue_state="$(gh issue view "${issue_number}" --repo "${GITHUB_REPOSITORY}" --json state --jq .state)"
+              if [ "${issue_state}" = "OPEN" ]; then
+                gh issue close "${issue_number}" --repo "${GITHUB_REPOSITORY}" \
+                  --comment "The repository now pins OpenSSL ${pinned}; no newer stable 3.5.x release is available (latest upstream: ${latest})."
+              fi
+            fi
+            exit 0
+          fi
+
+          notice="${RUNNER_TEMP}/openssl-watch.md"
+          {
+            echo '<!-- openssl-watch -->'
+            echo 'The weekly OpenSSL watch found a newer stable 3.5.x release.'
+            echo
+            echo "- Pinned: \`${pinned}\`"
+            echo "- Latest: \`${latest}\`"
+            echo
+            echo 'Review the upstream release and security advisories, then update the version and SHA-256 in `scripts/openssl-pin.env`.'
+            echo
+            echo '_This issue is maintained automatically by `.github/workflows/openssl-watch.yml`._'
+          } > "${notice}"
+
+          if [ -n "${issue_number}" ]; then
+            gh issue reopen "${issue_number}" --repo "${GITHUB_REPOSITORY}" 2>/dev/null || true
+            gh issue edit "${issue_number}" --repo "${GITHUB_REPOSITORY}" \
+              --title "${issue_title}" --body-file "${notice}"
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" \
+              --title "${issue_title}" --body-file "${notice}"
+          fi

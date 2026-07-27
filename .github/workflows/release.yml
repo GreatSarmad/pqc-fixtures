@@ -1,0 +1,114 @@
+name: Release
+
+# Builds the per-platform release archives: the Go core plus the pinned,
+# vendored OpenSSL engine required by ADR-001.
+#
+# Each platform builds on its own native runner (ADR-008). The Go core would
+# cross-compile happily, but OpenSSL needs a native toolchain, and the engine is
+# what makes the archive useful - so the whole archive is built natively.
+#
+# Publishing a release is a maintainer action (ADR-007): this workflow only
+# produces and uploads build artifacts.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: darwin-arm64
+          - os: ubuntu-latest
+            name: linux-amd64
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve artifact version
+        id: release
+        shell: bash
+        run: |
+          set -eu
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="dev-${GITHUB_SHA:0:7}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Read engine pin
+        id: pin
+        # Only the assignments: $GITHUB_OUTPUT rejects the file's comment lines.
+        run: grep -E '^[A-Z0-9_]+=' scripts/openssl-pin.env >> "$GITHUB_OUTPUT"
+
+      # The engine build takes several minutes and only changes when the pin
+      # changes, so it is cached on the pinned version plus the runner image.
+      - name: Restore cached engine
+        id: engine-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/engine
+          key: openssl-${{ matrix.name }}-${{ hashFiles('scripts/openssl-pin.env', 'scripts/build-openssl.sh') }}
+
+      - name: Build vendored OpenSSL engine
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: scripts/build-openssl.sh --out dist/engine
+
+      # Verify on every run, including cache hits: a cached engine still has to
+      # be the pinned version and still has to emit PQC artifacts.
+      - name: Verify engine
+        run: scripts/verify-openssl.sh dist/engine/openssl "${{ steps.pin.outputs.OPENSSL_VERSION }}"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build core
+        env:
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags "-X github.com/GreatSarmad/pqc-fixtures/src/cli.Version=${{ steps.release.outputs.version }}" \
+            -o dist/stage/pqc-fixtures ./src/cmd/pqc-fixtures
+
+      - name: Assemble archive
+        run: |
+          set -eu
+          name="pqc-fixtures-${{ steps.release.outputs.version }}-${{ matrix.name }}"
+          cp -R dist/engine dist/stage/engine
+          cp LICENSE dist/stage/LICENSE
+          cp THIRD-PARTY-NOTICES.md dist/stage/THIRD-PARTY-NOTICES.md
+          mkdir -p dist/out
+          tar -C dist/stage -czf "dist/out/${name}.tar.gz" .
+          ( cd dist/out && shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256" )
+
+      # Smoke-test what actually ships, not what was built: unpack the archive
+      # and make the CLI find its own engine.
+      - name: Smoke-test the archive
+        run: |
+          set -eu
+          mkdir -p dist/smoke
+          tar -C dist/smoke -xzf dist/out/*.tar.gz
+          test -f dist/smoke/LICENSE
+          test -f dist/smoke/THIRD-PARTY-NOTICES.md
+          test -f dist/smoke/engine/LICENSE.txt
+          test -f dist/smoke/engine/ENGINE-VERSION
+          test "$(dist/smoke/pqc-fixtures --version)" = "${{ steps.release.outputs.version }}"
+          dist/smoke/pqc-fixtures engine
+          dist/smoke/pqc-fixtures engine | grep -q "version: ${{ steps.pin.outputs.OPENSSL_VERSION }}"
+          dist/smoke/pqc-fixtures engine | grep -q "source:  bundled"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pqc-fixtures-${{ steps.release.outputs.version }}-${{ matrix.name }}
+          path: dist/out/*

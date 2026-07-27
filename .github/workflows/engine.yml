@@ -1,0 +1,59 @@
+name: Engine
+
+# Builds and verifies the vendored OpenSSL engine (ADR-001) on every supported
+# platform. Kept out of ci.yml because the engine build takes minutes and only
+# needs re-validating when the pin or the build recipe changes - notably after
+# a pin bump in response to an OpenSSL advisory.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/openssl-pin.env'
+      - 'scripts/build-openssl.sh'
+      - 'scripts/verify-openssl.sh'
+      - '.github/workflows/engine.yml'
+  pull_request:
+    paths:
+      - 'scripts/openssl-pin.env'
+      - 'scripts/build-openssl.sh'
+      - 'scripts/verify-openssl.sh'
+      - '.github/workflows/engine.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: engine (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: darwin-arm64
+          - os: ubuntu-latest
+            name: linux-amd64
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore cached engine
+        id: engine-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/engine
+          key: openssl-${{ matrix.name }}-${{ hashFiles('scripts/openssl-pin.env', 'scripts/build-openssl.sh') }}
+
+      - name: Build engine
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: scripts/build-openssl.sh --out dist/engine
+
+      - name: Verify engine
+        run: scripts/verify-openssl.sh dist/engine/openssl
+
+      - name: Report engine size
+        run: ls -l dist/engine
