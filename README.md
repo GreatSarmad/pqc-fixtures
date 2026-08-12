@@ -11,17 +11,76 @@ assumptions that can break during a post-quantum migration.
 
 ## Project status
 
-This project is pre-release. The repository bootstrap and pinned OpenSSL engine
-pipeline are implemented; fixture generation is the next milestone.
+This project is pre-release: certificate-chain generation works, and there is
+no tagged release yet.
 
-The CLI currently supports:
+The CLI supports:
 
-- `pqc-fixtures --help`
-- `pqc-fixtures --version`
-- `pqc-fixtures engine`, which diagnoses the bundled OpenSSL engine
+- `pqc-fixtures gen` — generate a post-quantum certificate chain and manifest
+- `pqc-fixtures schema` — print the JSON Schema for `manifest.json`
+- `pqc-fixtures engine` — diagnose the bundled OpenSSL engine
+- `pqc-fixtures --help` / `--version`
 
-The `gen`, preset, and `serve` commands described in the roadmap are not yet
-implemented. See [ROADMAP.md](ROADMAP.md) for the delivery sequence.
+Presets (`jumbo`, `worst-case-tls`), ML-KEM key artifacts, `serve`, and the
+GitHub Action are not implemented yet. See [ROADMAP.md](ROADMAP.md) for the
+delivery sequence.
+
+## Generating fixtures
+
+```sh
+pqc-fixtures gen --algo ml-dsa-65 --chain 3 --out ./testdata
+```
+
+```
+generating 3-certificate ML-DSA-65 chain with OpenSSL 3.5.7
+  [1/3] root             signature 3,309 B, public key 1,952 B
+  [2/3] intermediate-1   signature 3,309 B, public key 1,952 B
+  [3/3] leaf             signature 3,309 B, public key 1,952 B
+  chain verifies against its own root
+wrote 15 files to /path/to/testdata
+```
+
+The output directory contains, for each certificate in the chain, a private key
+and a certificate in the requested encodings, plus a concatenated chain, a
+plain-text warning, and a manifest:
+
+```
+INSECURE-TEST-root.key.pem            INSECURE-TEST-root.cert.pem
+INSECURE-TEST-intermediate-1.key.pem  INSECURE-TEST-intermediate-1.cert.pem
+INSECURE-TEST-leaf.key.pem            INSECURE-TEST-leaf.cert.pem
+INSECURE-TEST-fullchain.pem           INSECURE-TEST-README.txt
+manifest.json                         (…and .der copies of each key and cert)
+```
+
+`manifest.json` records every artifact's byte size and SHA-256, the algorithm's
+expected size envelope, the exact engine version used, and the resolved
+request. It is the contract other tools should read; its schema is published by
+`pqc-fixtures schema`.
+
+### Flags
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--out` | *(required)* | Output directory |
+| `--algo` | `ml-dsa-65` | `ml-dsa-44`, `ml-dsa-65`, `ml-dsa-87`, `slh-dsa-sha2-256f` |
+| `--chain` | `3` | Certificates from root to leaf **inclusive** (1–16) |
+| `--days` | `30` | Validity in days; capped at 30 so fixtures expire |
+| `--formats` | `pem,der` | `pem`, `der`, or both |
+| `--seed` | *(none)* | Hex seed for reproducible keys (ML-DSA only) |
+| `--sans` | `DNS:localhost,IP:127.0.0.1` | Leaf subject alternative names |
+| `--force` | off | Replace a previous pqc-fixtures output directory |
+| `--quiet` | off | Suppress progress output |
+
+`--chain 1` produces a single self-signed certificate that is both the trust
+anchor and the TLS server certificate; `--chain 2` is root + leaf.
+
+### Why the artifacts are so obviously unusable
+
+Every generated file is a test fixture by construction, and says so three ways:
+an `INSECURE-TEST-` filename prefix, a `PQC-FIXTURES TEST ONLY` distinguished
+name in every subject and issuer, and a validity window of at most 30 days.
+Nothing generated chains to any real trust store, and the tool refuses to
+replace a directory it did not create.
 
 ## Why this exists
 
@@ -50,6 +109,10 @@ make build
 bin/pqc-fixtures --help
 ```
 
+`make test` skips the tests that need a real engine. To run the full suite,
+including the acceptance criteria that measure bytes on disk, build the engine
+first and use `make test-engine`.
+
 Building the vendored engine requires a native compiler toolchain and downloads
 the pinned OpenSSL source once:
 
@@ -71,19 +134,21 @@ Native Windows support is deferred for v1. Windows users should use WSL2.
 
 ## Reproducibility contract
 
-The engine version and source checksum are pinned, and release archives record
-the engine they contain. The planned v1 generation contract is more precise
-than “identical output every time”:
+The engine version and source checksum are pinned, and every manifest records
+the engine that produced it. The generation contract is more precise than
+“identical output every time”:
 
-- `--seed` will produce byte-identical ML-DSA and ML-KEM keys; ML-DSA uses a
-  32-byte seed and ML-KEM uses a 64-byte seed;
-- certificates will keep the same structure and size envelope, but their bytes
-  may differ because of validity timestamps and hedged signatures;
-- SLH-DSA cannot be seeded through the OpenSSL CLI and will remain
-  non-deterministic.
+- `--seed` produces byte-identical ML-DSA keys, for every certificate in the
+  chain, along with stable serial numbers. ML-DSA takes a 32-byte seed and
+  ML-KEM a 64-byte one; the per-certificate sub-seeds are derived from the one
+  value you pass;
+- certificates keep the same structure and size envelope, but their bytes may
+  differ between runs because of validity timestamps and hedged signatures;
+- SLH-DSA cannot be seeded through the OpenSSL CLI, so `--seed` is a no-op for
+  it and says so on stderr.
 
-These generation behaviors are design commitments for the upcoming `gen`
-milestone, not commands available in the current bootstrap release.
+Each artifact's `seeded` flag in the manifest reports which of these applies,
+per file rather than per run.
 
 ## Security and licensing
 

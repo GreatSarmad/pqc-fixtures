@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GreatSarmad/pqc-fixtures/manifest.schema.json",
+  "title": "pqc-fixtures Manifest",
+  "description": "Machine-readable record of one pqc-fixtures generation run. This is the only contract between the CLI, serve, the GitHub Action, and any downstream consumer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "warning", "tool", "engine", "generatedAt", "spec", "artifacts"],
+  "properties": {
+    "schemaVersion": {
+      "description": "Version of this manifest format. Incremented only for breaking changes.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "warning": {
+      "description": "Human-readable statement that every artifact in this run is insecure and test-only.",
+      "type": "string"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "const": "pqc-fixtures" },
+        "version": { "type": "string" }
+      }
+    },
+    "engine": {
+      "description": "The cryptographic engine that produced the artifacts. Recorded so users can audit their exposure to engine CVEs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "pinnedVersion"],
+      "properties": {
+        "name": { "type": "string", "const": "openssl" },
+        "version": {
+          "description": "Version actually used for this run.",
+          "type": "string"
+        },
+        "pinnedVersion": {
+          "description": "Version this build of pqc-fixtures ships. Differs from version only when the engine was overridden.",
+          "type": "string"
+        }
+      }
+    },
+    "generatedAt": {
+      "description": "RFC 3339 UTC timestamp of the run.",
+      "type": "string"
+    },
+    "spec": {
+      "description": "The fully resolved generation request.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "chainDepth", "validityDays", "formats", "seeded", "subjectAltNames", "sizeEnvelope"],
+      "properties": {
+        "algorithm": {
+          "description": "AlgorithmProfile identifier, e.g. ml-dsa-65.",
+          "type": "string"
+        },
+        "chainDepth": {
+          "description": "Number of certificates from root to leaf inclusive.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "validityDays": {
+          "description": "Certificate validity in days. Capped at 30 so fixtures expire (safety marker).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "formats": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["pem", "der"] }
+        },
+        "seeded": {
+          "description": "Whether --seed was used AND the algorithm supports seeded keygen. SLH-DSA is never seeded (ADR-002).",
+          "type": "boolean"
+        },
+        "subjectAltNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sizeEnvelope": {
+          "description": "Expected raw byte sizes from the AlgorithmProfile registry (FIPS 203/204/205).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["publicKeyBytes", "signatureBytes"],
+          "properties": {
+            "publicKeyBytes": { "type": "integer", "minimum": 1 },
+            "signatureBytes": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "kind", "encoding", "role", "bytes", "sha256"],
+        "properties": {
+          "path": {
+            "description": "Path relative to the output directory.",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["privateKey", "publicKey", "certificate", "chain", "notice"]
+          },
+          "encoding": {
+            "type": "string",
+            "enum": ["pem", "der", "text"]
+          },
+          "role": {
+            "description": "Position in the chain: root, intermediate-N, leaf, or chain for aggregate files.",
+            "type": "string"
+          },
+          "bytes": {
+            "description": "Size of the file on disk.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "key": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["algorithm", "seeded"],
+            "properties": {
+              "algorithm": { "type": "string" },
+              "seeded": { "type": "boolean" }
+            }
+          },
+          "certificate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["algorithm", "subject", "issuer", "serialNumber", "notBefore", "notAfter", "isCA", "signatureBytes", "publicKeyBytes"],
+            "properties": {
+              "algorithm": { "type": "string" },
+              "subject": { "type": "string" },
+              "issuer": { "type": "string" },
+              "serialNumber": { "type": "string" },
+              "notBefore": { "type": "string" },
+              "notAfter": { "type": "string" },
+              "isCA": { "type": "boolean" },
+              "signatureBytes": {
+                "description": "Raw signature length, asserted against the AlgorithmProfile envelope.",
+                "type": "integer",
+                "minimum": 1
+              },
+              "publicKeyBytes": {
+                "description": "Raw subject public key length, asserted against the AlgorithmProfile envelope.",
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -110,3 +110,31 @@ Low-confidence design choices are documented for review rather than silently bec
 - Acceptance is a **check, not an assertion**: a full-history secret scan (gitleaks) must pass on whatever is pushed, and the local git identity for this repo is switched to the noreply address so the policy holds for future commits.
 
 **Confidence:** ~97%.
+
+## ADR-010: Zero dependencies, including for tests; the manifest schema is checked by a purpose-built subset validator
+
+**Decision:** `go.mod` declares no `require`d modules and none will be added without a new ADR — test-only dependencies included. Design-dossier §8 criterion 4 ("every Manifest validates against its published JSON Schema") is enforced by `tests/internal/schemacheck`, a ~200-line validator covering exactly the JSON Schema keywords `src/manifest/manifest.schema.json` uses (`type`, `properties`, `required`, `additionalProperties: false`, `items`, `enum`, `const`, `minimum`, `pattern`).
+
+**Rationale:**
+- Our audience is professionally paranoid about supply chain (dossier §9). A `go.mod` with an empty require block is a claim they can verify in five seconds, and `tests/cmd` asserts it stays that way. Go does not distinguish test-only dependencies in the module graph, so a jsonschema library would appear in every consumer's `go list -m all`.
+- The alternative — a full JSON Schema library (e.g. `santhosh-tekuri/jsonschema`) — is less code for us and more code for everyone auditing us. For a schema this small the trade favours writing it.
+
+**What makes a hand-written subset safe:** the validator treats *any* keyword it does not implement as a hard failure, not a silent pass. If the schema grows past the subset, the test fails and the choice (extend the validator, or take the dependency) is made deliberately rather than by omission. A negative-case test suite proves the validator can reject: missing required fields, wrong types, undeclared properties, bad enum values, malformed hashes.
+
+**Consequence:** if a future feature needs real JSON Schema (`$ref`, `oneOf`, `if`/`then`, format assertions), take the dependency and supersede this ADR rather than growing a home-made implementation of a specification.
+
+**Confidence:** ~96%.
+
+## ADR-011: The `gen` output layout is a public contract
+
+**Decision:** F1 fixes the following as the contract every downstream consumer (`serve`, the GitHub Action, `report`) may rely on, changeable only by bumping `manifest.schemaVersion`:
+
+1. **Chain semantics.** `--chain N` is the number of certificates from root to leaf inclusive, 1–16. N=1 is a single self-signed certificate that is both the trust anchor and the TLS end entity; N=2 is root + leaf; N≥3 inserts `intermediate-1`…`intermediate-(N-2)` numbered from the root down. Each CA's `pathlen` equals the number of CAs below it, so a generated chain cannot be silently extended.
+2. **Filenames.** `INSECURE-TEST-<role>.{key,cert}.{pem,der}`, plus `INSECURE-TEST-fullchain.pem` (leaf first), `INSECURE-TEST-README.txt`, and `manifest.json`. The prefix is a safety marker (dossier §9), not decoration, so it applies to every generated file except the manifest itself.
+3. **`fullchain.pem` is always PEM**, whatever `--formats` says: DER has no representation for a sequence of certificates.
+4. **Atomic replacement.** Output is staged in a sibling temp directory and moved into place only after the chain verifies and every size assertion passes. `--force` replaces a directory only if it contains a `manifest.json` that pqc-fixtures wrote; anything else is refused, so a mistyped `--out` cannot delete a user's data.
+5. **Seed derivation.** A chain needs one key per certificate but a user supplies one `--seed`. Per-role sub-seeds are `SHA-256`-derived with domain separation, so the whole chain — keys and serial numbers — is reproducible from one value. This is labelling, not a security construction; the keys protect nothing.
+
+**Rationale:** the Manifest is "the only contract between components" (dossier §6), and a contract that only describes the file *list* is not enough — `serve` needs to know which file is the chain, and CI caching needs stable names. Fixing the layout now costs nothing; discovering it later, after an Action depends on it, costs a breaking change.
+
+**Confidence:** ~95%. The residual risk is chain-depth semantics: someone may read `--chain 3` as "three intermediates". The help text and README state the definition explicitly, and depth is recorded in the manifest.

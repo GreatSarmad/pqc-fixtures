@@ -1,20 +1,32 @@
 name: Engine
 
 # Builds and verifies the vendored OpenSSL engine (ADR-001) on every supported
-# platform. Kept out of ci.yml because the engine build takes minutes and only
-# needs re-validating when the pin or the build recipe changes - notably after
-# a pin bump in response to an OpenSSL advisory.
+# platform, then runs the parts of the test suite that need a real engine -
+# design-dossier §8 criteria 1-6, on all three platforms (criterion 9).
+#
+# Kept out of ci.yml because the first engine build takes minutes. Subsequent
+# runs restore it from cache, so adding src/ and tests/ to the triggers costs
+# about a minute per push while making the acceptance criteria a gate rather
+# than a claim.
 
 on:
   push:
     branches: [main]
     paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'go.mod'
+      - 'Makefile'
       - 'scripts/openssl-pin.env'
       - 'scripts/build-openssl.sh'
       - 'scripts/verify-openssl.sh'
       - '.github/workflows/engine.yml'
   pull_request:
     paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'go.mod'
+      - 'Makefile'
       - 'scripts/openssl-pin.env'
       - 'scripts/build-openssl.sh'
       - 'scripts/verify-openssl.sh'
@@ -41,6 +53,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Restore cached engine
         id: engine-cache
         uses: actions/cache@v4
@@ -54,6 +70,9 @@ jobs:
 
       - name: Verify engine
         run: scripts/verify-openssl.sh dist/engine/openssl
+
+      - name: Run the engine-backed acceptance tests
+        run: make test-engine
 
       - name: Report engine size
         run: ls -l dist/engine
