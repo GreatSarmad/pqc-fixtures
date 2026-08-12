@@ -138,3 +138,14 @@ Low-confidence design choices are documented for review rather than silently bec
 **Rationale:** the Manifest is "the only contract between components" (dossier §6), and a contract that only describes the file *list* is not enough — `serve` needs to know which file is the chain, and CI caching needs stable names. Fixing the layout now costs nothing; discovering it later, after an Action depends on it, costs a breaking change.
 
 **Confidence:** ~95%. The residual risk is chain-depth semantics: someone may read `--chain 3` as "three intermediates". The help text and README state the definition explicitly, and depth is recorded in the manifest.
+
+### ADR-007 amendment: standing push authorization
+
+**Granted by the founder, 2026-08-12.** Repository maintenance may push commits to `origin main` without asking each time, provided **all** of the following hold for that push:
+
+- `make lint`, `make test`, and `make build` are green;
+- `gitleaks git` exits 0;
+- the repository-local `git config user.email` is `97066252+GreatSarmad@users.noreply.github.com`;
+- the command is exactly `git push origin main` — never `--force`, never `--mirror`, never a tag or another branch.
+
+Everything else in ADR-007 is unchanged. **Tags, releases, package publication, registrations, and public posts remain the founder's alone** — this amendment covers pushing already-reviewed commits to the default branch, nothing more. A push that cannot satisfy every condition above is a founder action item, not a judgement call.
