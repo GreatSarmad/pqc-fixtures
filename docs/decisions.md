@@ -149,3 +149,15 @@ Low-confidence design choices are documented for review rather than silently bec
 - the command is exactly `git push origin main` — never `--force`, never `--mirror`, never a tag or another branch.
 
 Everything else in ADR-007 is unchanged. **Tags, releases, package publication, registrations, and public posts remain the founder's alone** — this amendment covers pushing already-reviewed commits to the default branch, nothing more. A push that cannot satisfy every condition above is a founder action item, not a judgement call.
+
+### ADR-006 amendment: registry names are claimed by shipping, not before
+
+**Decided by the founder, 2026-08-12**, superseding this ADR's original "register the npm and PyPI names at slice launch, before any public post."
+
+Neither npm nor PyPI offers name reservation. Claiming `pqc-fixtures` on either requires publishing a real, installable package, and both registries treat empty placeholders as squatting and removable on request. "Register the name early" and "ship a distribution wrapper" are therefore the same action, and the original instruction assumed a cheap half that does not exist.
+
+**New position:** registry names are claimed when the installer packages are genuinely functional — no earlier than the Stage-0 distribution wrappers, and after the CLI has consolidated (F2 presets at minimum). The GitHub release is the distribution channel until then.
+
+**Risk accepted:** `pqc-fixtures` could be taken in the interval. Judged low — the name is specific, the project is now publicly visible under it with a tagged release, and a squatter would have no plausible package to publish. If either name is lost, renaming before wrappers exist is cheap; the Go module path and repository would change, the product would not.
+
+**Consequence for sequencing:** the ROADMAP's "Release gate" item no longer blocks the demo post on registration. Publishing the demo post before the names exist is now an accepted, deliberate exposure rather than an oversight.
