@@ -12,6 +12,7 @@ import (
 	"github.com/GreatSarmad/pqc-fixtures/src/engine"
 	"github.com/GreatSarmad/pqc-fixtures/src/gen"
 	"github.com/GreatSarmad/pqc-fixtures/src/manifest"
+	"github.com/GreatSarmad/pqc-fixtures/src/preset"
 	"github.com/GreatSarmad/pqc-fixtures/tests/internal/testengine"
 )
 
@@ -252,5 +253,145 @@ func TestExecuteSetsTheManifestToolVersion(t *testing.T) {
 	run("--version")
 	if gen.ToolVersion != cli.Version {
 		t.Errorf("gen.ToolVersion = %q, want %q", gen.ToolVersion, cli.Version)
+	}
+}
+
+func TestPresetsCommandListsEveryPreset(t *testing.T) {
+	code, stdout, stderr := run("presets")
+	if code != 0 {
+		t.Fatalf("exit code = %d (stderr: %s)", code, stderr)
+	}
+	for _, p := range preset.All() {
+		if !strings.Contains(stdout, p.Name) || !strings.Contains(stdout, p.Summary) {
+			t.Errorf("preset listing omits %s:\n%s", p.Name, stdout)
+		}
+	}
+	// The listing exists to make the sizes obvious without generating anything.
+	if !strings.Contains(stdout, "49,856") {
+		t.Errorf("preset listing does not show the SLH-DSA signature size:\n%s", stdout)
+	}
+}
+
+func TestPresetsCommandDescribesOnePreset(t *testing.T) {
+	p, err := preset.Lookup("worst-case-tls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := run("presets", "worst-case-tls")
+	if code != 0 {
+		t.Fatalf("exit code = %d (stderr: %s)", code, stderr)
+	}
+	for _, want := range []string{p.Description, p.Breaks[0], "gen --preset worst-case-tls"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("description omits %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestPresetsCommandRejectsUnknownNames(t *testing.T) {
+	code, _, stderr := run("presets", "no-such-preset")
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "jumbo") {
+		t.Errorf("stderr does not list the presets that do exist:\n%s", stderr)
+	}
+}
+
+// TestGenPresetProducesWhatThePresetPromises is the ROADMAP F2 acceptance
+// check: naming a preset generates its chain, and the manifest carries both
+// the attribution and the registry-derived floor the output must clear.
+func TestGenPresetProducesWhatThePresetPromises(t *testing.T) {
+	eng := testengine.Locate(t)
+	t.Setenv(engine.EnvOverride, eng.Path)
+
+	for _, name := range []string{"jumbo", "deep-chain", "worst-case-tls"} {
+		t.Run(name, func(t *testing.T) {
+			p, err := preset.Lookup(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outDir := filepath.Join(t.TempDir(), "testdata")
+			code, _, stderr := run("gen", "--preset", name, "--out", outDir, "--quiet")
+			if code != 0 {
+				t.Fatalf("exit code = %d (stderr: %s)", code, stderr)
+			}
+			if strings.Contains(stderr, "warning:") {
+				t.Errorf("a shipped preset warned on a plain run:\n%s", stderr)
+			}
+
+			man, err := manifest.Load(filepath.Join(outDir, manifest.FileName))
+			if err != nil {
+				t.Fatalf("loading manifest: %v", err)
+			}
+			if man.Spec.Preset == nil {
+				t.Fatal("manifest does not record which preset produced it")
+			}
+			if man.Spec.Preset.Name != p.Name || man.Spec.Preset.Version != p.Version {
+				t.Errorf("manifest records preset %+v, want %s v%d", man.Spec.Preset, p.Name, p.Version)
+			}
+			if man.Spec.Preset.Modified {
+				t.Error("an unmodified preset run is recorded as modified")
+			}
+			if man.Spec.Algorithm != p.Spec.Algorithm || man.Spec.ChainDepth != p.Spec.ChainDepth {
+				t.Errorf("manifest spec = %+v, want the preset's algorithm and depth", man.Spec)
+			}
+			if man.Spec.SizeEnvelope.MinChainBytes != p.MinChainBytes() {
+				t.Errorf("manifest floor = %d, want %d", man.Spec.SizeEnvelope.MinChainBytes, p.MinChainBytes())
+			}
+
+			// The promise is about bytes, so measure the bytes.
+			total := 0
+			for _, a := range man.Artifacts {
+				if a.Kind == manifest.KindCertificate && a.Encoding == manifest.EncodingDER {
+					total += a.Bytes
+				}
+			}
+			if total < p.MinChainBytes() {
+				t.Errorf("%s produced %d bytes of DER certificates, below its %d-byte floor",
+					name, total, p.MinChainBytes())
+			}
+		})
+	}
+}
+
+// TestGenPresetFlagsOverrideAndAreRecorded: a preset is a default, not a
+// prison - but a run that departs from it must say so on stderr and in the
+// manifest, or an old fixture set stops being interpretable.
+func TestGenPresetFlagsOverrideAndAreRecorded(t *testing.T) {
+	eng := testengine.Locate(t)
+	t.Setenv(engine.EnvOverride, eng.Path)
+
+	outDir := filepath.Join(t.TempDir(), "testdata")
+	code, _, stderr := run("gen", "--preset", "deep-chain", "--chain", "2", "--out", outDir, "--quiet")
+	if code != 0 {
+		t.Fatalf("exit code = %d (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "--chain") {
+		t.Errorf("stderr does not report that --chain overrode the preset:\n%s", stderr)
+	}
+
+	man, err := manifest.Load(filepath.Join(outDir, manifest.FileName))
+	if err != nil {
+		t.Fatalf("loading manifest: %v", err)
+	}
+	if man.Spec.ChainDepth != 2 {
+		t.Errorf("chainDepth = %d, want the flag's 2", man.Spec.ChainDepth)
+	}
+	if man.Spec.Preset == nil || !man.Spec.Preset.Modified {
+		t.Errorf("manifest preset = %+v, want deep-chain recorded as modified", man.Spec.Preset)
+	}
+	if man.Spec.Algorithm != "ml-dsa-87" {
+		t.Errorf("algorithm = %q, want the preset's ml-dsa-87 to survive", man.Spec.Algorithm)
+	}
+}
+
+func TestGenRejectsUnknownPreset(t *testing.T) {
+	code, _, stderr := run("gen", "--preset", "no-such-preset", "--out", t.TempDir())
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "unknown preset") {
+		t.Errorf("stderr does not name the problem:\n%s", stderr)
 	}
 }

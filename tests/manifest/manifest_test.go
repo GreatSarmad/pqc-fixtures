@@ -27,7 +27,10 @@ func sample() *manifest.Manifest {
 			Formats:         []string{"pem", "der"},
 			Seeded:          true,
 			SubjectAltNames: []string{"DNS:localhost", "IP:127.0.0.1"},
-			SizeEnvelope:    manifest.Envelope{PublicKeyBytes: 1952, SignatureBytes: 3309},
+			SizeEnvelope: manifest.Envelope{
+				PublicKeyBytes: 1952, SignatureBytes: 3309, MinChainBytes: 3 * (1952 + 3309),
+			},
+			Preset: &manifest.PresetRef{Name: "example", Version: 1},
 		},
 		Artifacts: []manifest.Artifact{
 			{

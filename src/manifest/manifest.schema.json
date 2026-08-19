@@ -78,14 +78,33 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "preset": {
+          "description": "The shipped preset this run came from. Absent when the request was assembled from flags alone. Presets are versioned data, so the version is recorded alongside the name.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "modified"],
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "integer", "minimum": 1 },
+            "modified": {
+              "description": "A flag overrode something the preset specified, so this run is attributed to the preset but is not what the preset alone would produce.",
+              "type": "boolean"
+            }
+          }
+        },
         "sizeEnvelope": {
           "description": "Expected raw byte sizes from the AlgorithmProfile registry (FIPS 203/204/205).",
           "type": "object",
           "additionalProperties": false,
-          "required": ["publicKeyBytes", "signatureBytes"],
+          "required": ["publicKeyBytes", "signatureBytes", "minChainBytes"],
           "properties": {
             "publicKeyBytes": { "type": "integer", "minimum": 1 },
-            "signatureBytes": { "type": "integer", "minimum": 1 }
+            "signatureBytes": { "type": "integer", "minimum": 1 },
+            "minChainBytes": {
+              "description": "Smallest total DER certificate-chain size this request can produce: chainDepth x (signatureBytes + publicKeyBytes). gen asserts the real output against it.",
+              "type": "integer",
+              "minimum": 1
+            }
           }
         }
       }

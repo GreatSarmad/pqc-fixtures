@@ -63,6 +63,23 @@ type Profile struct {
 // algorithm (ADR-002).
 func (p Profile) Seedable() bool { return p.SeedBytes > 0 }
 
+// MinChainBytes is the smallest total DER size a chain of chainDepth
+// certificates in this algorithm can occupy. Every certificate embeds at least
+// its own signature and its own public key, so the sum of those two per
+// certificate is a floor no correct engine can undercut - the real chain is
+// larger by each certificate's distinguished names, extensions, and ASN.1
+// framing.
+//
+// It is deliberately a floor rather than an estimate: it is derived only from
+// the standards' own numbers, so it can be asserted against real output
+// without encoding any assumption about how the engine lays a certificate out.
+func (p Profile) MinChainBytes(chainDepth int) int {
+	if chainDepth < 1 {
+		return 0
+	}
+	return chainDepth * (p.SignatureBytes + p.PublicKeyBytes)
+}
+
 // registry is keyed by Profile.ID.
 var registry = map[string]Profile{
 	"ml-dsa-44": {

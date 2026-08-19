@@ -1,0 +1,18 @@
+{
+  "name": "deep-chain",
+  "version": 1,
+  "summary": "A ten-certificate ML-DSA-87 chain: depth stress rather than single-artifact size.",
+  "description": "Ten ML-DSA-87 certificates from root to leaf, each with a 4,627-byte signature and a 2,592-byte public key. Where jumbo and worst-case-tls stress how big one artifact can be, this stresses how many of them a path builder will walk: ten is exactly the default cap in some TLS stacks, so this fixture sits on the boundary where a chain stops being rejected for its size and starts being rejected for its length. Every CA in the chain carries a pathlen that permits exactly the certificates beneath it, so a verifier that ignores pathlen and one that honours it reach the same answer.",
+  "breaks": [
+    "Chain-length caps (Java's jdk.tls.maxCertificateChainLength defaults to 10)",
+    "Path-building algorithms whose cost grows with depth",
+    "Verifiers that recurse once per certificate over a fixed stack",
+    "Certificate-store APIs that expect a leaf and one intermediate"
+  ],
+  "spec": {
+    "algorithm": "ml-dsa-87",
+    "chainDepth": 10,
+    "validityDays": 30,
+    "formats": "pem,der"
+  }
+}

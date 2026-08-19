@@ -1,0 +1,19 @@
+{
+  "name": "worst-case-tls",
+  "version": 1,
+  "summary": "A three-certificate SLH-DSA-SHA2-256f chain with localhost SANs: the largest chain a TLS server would realistically present.",
+  "description": "The fixture to point a TLS server at. Three SLH-DSA-SHA2-256f certificates - root, intermediate, leaf - put roughly 150 KB of Certificate message on the wire, against a TLS record limit of 16 KB and handshake buffers that were sized when chains were 4 KB. The leaf carries serverAuth and localhost SANs over both IPv4 and IPv6, so it drops straight into a local server without a hostname-mismatch error masking the size failure you are actually testing for.",
+  "breaks": [
+    "TLS handshake buffers sized for pre-quantum chains (the Certificate message spans many records)",
+    "Clients and middleboxes that cap the total certificate chain size",
+    "Handshake timeouts on constrained or high-latency links, from the extra round trips",
+    "Path builders that re-parse the whole chain per candidate path"
+  ],
+  "spec": {
+    "algorithm": "slh-dsa-sha2-256f",
+    "chainDepth": 3,
+    "validityDays": 30,
+    "formats": "pem,der",
+    "subjectAltNames": ["DNS:localhost", "IP:127.0.0.1", "IP:::1"]
+  }
+}

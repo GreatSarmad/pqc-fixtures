@@ -1,0 +1,18 @@
+{
+  "name": "jumbo",
+  "version": 1,
+  "summary": "One self-signed SLH-DSA-SHA2-256f certificate: the largest single artifact FIPS 205 defines.",
+  "description": "The smallest fixture set that puts a ~50 KB certificate in front of your code. SLH-DSA-SHA2-256f signatures are 49,856 bytes - roughly 700x an ECDSA P-256 signature and 70x an RSA-2048 one - so a single self-signed certificate is already larger than most default read buffers, header limits, and VARCHAR columns. Use this when you want to know whether one certificate breaks something, before you complicate the picture with a chain.",
+  "breaks": [
+    "Fixed-size certificate read buffers (4 KB and 16 KB are both common defaults)",
+    "Database columns sized for RSA/ECDSA PEM, typically VARCHAR(4096) or smaller",
+    "HTTP header and metadata limits when a certificate is passed base64-encoded",
+    "Parsers that assume a certificate fits in a single TLS record"
+  ],
+  "spec": {
+    "algorithm": "slh-dsa-sha2-256f",
+    "chainDepth": 1,
+    "validityDays": 30,
+    "formats": "pem,der"
+  }
+}

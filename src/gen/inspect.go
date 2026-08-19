@@ -29,8 +29,11 @@ type certFacts struct {
 	isCA           bool
 	signatureBytes int
 	publicKeyBytes int
-	rawSubject     []byte
-	rawIssuer      []byte
+	// derBytes is the certificate's own DER length - what it costs on the
+	// wire, as distinct from the signature and key it carries.
+	derBytes   int
+	rawSubject []byte
+	rawIssuer  []byte
 }
 
 // inspectCert parses a DER certificate.
@@ -56,6 +59,7 @@ func inspectCert(derPath string) (certFacts, error) {
 		isCA:           cert.IsCA,
 		signatureBytes: len(cert.Signature),
 		publicKeyBytes: pubBytes,
+		derBytes:       len(der),
 		rawSubject:     cert.RawSubject,
 		rawIssuer:      cert.RawIssuer,
 	}, nil

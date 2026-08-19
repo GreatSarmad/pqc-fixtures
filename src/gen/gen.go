@@ -63,6 +63,14 @@ type Options struct {
 	SeedHex      string
 	SANs         []string
 	Force        bool
+	// PresetName and PresetVersion record which shipped preset supplied these
+	// values, when one did. Resolution of a preset into an Options belongs to
+	// the CLI, which is the only layer that knows which flags the user set
+	// explicitly; the core only carries the attribution through to the
+	// manifest.
+	PresetName     string
+	PresetVersion  int
+	PresetModified bool
 }
 
 // Spec is a fully resolved, validated generation request (the FixtureSpec of
@@ -76,6 +84,11 @@ type Spec struct {
 	Seed         []byte
 	SANs         []string
 	Force        bool
+	// PresetName, PresetVersion, and PresetModified attribute this request to a
+	// shipped preset, and record whether a flag changed anything it specified.
+	PresetName     string
+	PresetVersion  int
+	PresetModified bool
 	// Warnings are non-fatal notes raised during resolution, surfaced to the
 	// user before generation starts.
 	Warnings []string
@@ -122,14 +135,21 @@ func Resolve(opts Options) (*Spec, error) {
 		return nil, err
 	}
 
+	if opts.PresetName != "" && opts.PresetVersion < 1 {
+		return nil, fmt.Errorf("preset %q has no version; presets are versioned data", opts.PresetName)
+	}
+
 	spec := &Spec{
-		Profile:      prof,
-		ChainDepth:   opts.ChainDepth,
-		OutDir:       opts.OutDir,
-		ValidityDays: opts.ValidityDays,
-		Formats:      formats,
-		SANs:         opts.SANs,
-		Force:        opts.Force,
+		Profile:        prof,
+		ChainDepth:     opts.ChainDepth,
+		OutDir:         opts.OutDir,
+		ValidityDays:   opts.ValidityDays,
+		Formats:        formats,
+		SANs:           opts.SANs,
+		Force:          opts.Force,
+		PresetName:     opts.PresetName,
+		PresetVersion:  opts.PresetVersion,
+		PresetModified: opts.PresetModified,
 	}
 	if spec.SANs == nil {
 		spec.SANs = DefaultSANs
@@ -309,6 +329,21 @@ func Generate(ctx context.Context, spec *Spec, eng Engine, progress io.Writer) (
 		return nil, fmt.Errorf("generated chain failed verification: %w", err)
 	}
 	logf(progress, "  chain verifies against its own root\n")
+
+	// design-dossier §8 criterion 3, at the level of the whole chain: the
+	// worst-case presets exist to promise a certain number of bytes on the
+	// wire, and the floor they are measured against comes from the
+	// AlgorithmProfile registry rather than from any preset file.
+	chainBytes := 0
+	for _, f := range facts {
+		chainBytes += f.derBytes
+	}
+	if floor := spec.Profile.MinChainBytes(spec.ChainDepth); chainBytes < floor {
+		return nil, fmt.Errorf("generated chain is %d bytes of DER, below the %d-byte floor "+
+			"%d %s certificates must occupy - refusing to emit a fixture set that understates "+
+			"post-quantum sizes", chainBytes, floor, spec.ChainDepth, spec.Profile.EngineName)
+	}
+	logf(progress, "  chain is %s B of DER across %s\n", thousands(chainBytes), certCount(len(plan)))
 
 	if err := os.WriteFile(filepath.Join(tmpDir, NoticeFile), []byte(noticeText(spec)), 0o644); err != nil {
 		return nil, fmt.Errorf("writing notice: %w", err)
@@ -510,8 +545,14 @@ func buildManifest(spec *Spec, plan []PlannedCertificate, facts []certFacts, eng
 			SizeEnvelope: manifest.Envelope{
 				PublicKeyBytes: spec.Profile.PublicKeyBytes,
 				SignatureBytes: spec.Profile.SignatureBytes,
+				MinChainBytes:  spec.Profile.MinChainBytes(spec.ChainDepth),
 			},
 		},
+	}
+	if spec.PresetName != "" {
+		man.Spec.Preset = &manifest.PresetRef{
+			Name: spec.PresetName, Version: spec.PresetVersion, Modified: spec.PresetModified,
+		}
 	}
 
 	add := func(name, kind, encoding, roleName string, key *manifest.KeyDetail, cert *manifest.CertDetail) error {
@@ -581,6 +622,9 @@ func noticeText(spec *Spec) string {
 	b.WriteString("  locally and trusted by nothing.\n\n")
 	b.WriteString("Algorithm: " + spec.Profile.EngineName + "\n")
 	b.WriteString(fmt.Sprintf("Chain depth: %d\n", spec.ChainDepth))
+	if spec.PresetName != "" {
+		b.WriteString(fmt.Sprintf("Preset: %s (v%d)\n", spec.PresetName, spec.PresetVersion))
+	}
 	b.WriteString("Machine-readable details: " + manifest.FileName + "\n")
 	return b.String()
 }
@@ -591,6 +635,14 @@ func logf(w io.Writer, format string, args ...any) {
 		return
 	}
 	fmt.Fprintf(w, format, args...)
+}
+
+// certCount pluralizes a certificate count for progress output.
+func certCount(n int) string {
+	if n == 1 {
+		return "1 certificate"
+	}
+	return fmt.Sprintf("%d certificates", n)
 }
 
 // thousands formats a byte count with separators, because the whole point of

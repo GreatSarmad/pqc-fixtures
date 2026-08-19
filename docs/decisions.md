@@ -161,3 +161,23 @@ Neither npm nor PyPI offers name reservation. Claiming `pqc-fixtures` on either 
 **Risk accepted:** `pqc-fixtures` could be taken in the interval. Judged low — the name is specific, the project is now publicly visible under it with a tagged release, and a squatter would have no plausible package to publish. If either name is lost, renaming before wrappers exist is cheap; the Go module path and repository would change, the product would not.
 
 **Consequence for sequencing:** the ROADMAP's "Release gate" item no longer blocks the demo post on registration. Publishing the demo post before the names exist is now an accepted, deliberate exposure rather than an oversight.
+
+---
+
+## ADR-012: Preset files are versioned data with no byte counts of their own
+
+**Decision:** The worst-case presets ship as one JSON file per preset under `src/preset/presets/`, embedded into the binary. A preset file carries only the generation request (algorithm, chain depth, validity, encodings, SANs), a version integer, and prose. It carries **no sizes**: every byte count a preset promises is derived at runtime from the `src/profile` AlgorithmProfile registry. `gen` asserts each run's total DER chain size against `Profile.MinChainBytes(chainDepth)` — `chainDepth × (signature + public key)`, a floor no correct engine can undercut.
+
+`--preset` is resolved in `src/cli`, not `src/gen`. The core receives an ordinary `Options` plus three attribution fields (`PresetName`, `PresetVersion`, `PresetModified`) that it records in the manifest.
+
+**Rationale:**
+- Design-dossier §6 already fixed presets as "named FixtureSpecs shipped as data files, not code". The open question was where the *size assertions* live. Putting them in the preset file would create a second source of truth for numbers FIPS 203/204/205 already fix, and the two would drift the first time a parameter set changed. Deriving them from the registry makes drift structurally impossible, and gives the same floor to plain `--algo` runs for free.
+- Presets must be versioned data (dossier §10, "standards churn breaks presets"): the manifest records name + version + whether a flag overrode the preset, so a fixture set generated months ago is still interpretable after the preset moves on. A `deprecated` field lets a preset warn and keep working rather than vanish.
+- Preset resolution belongs in the CLI because only the CLI can distinguish a flag the user typed from a flag sitting at its default — that distinction *is* the override mechanism. Pushing it into the core would mean inventing a tri-state for every option.
+- Files live beside the package rather than in the root `assets/` directory because `go:embed` cannot reach outside a package directory, and because `src/manifest/manifest.schema.json` already established that pattern for embedded contract data.
+
+**Costs accepted:** a preset cannot express anything the `gen` flags cannot; presets that need a genuinely new knob will require a flag first. Judged correct — a preset that can do things the CLI cannot is a configuration DSL, which design-dossier §7 explicitly rejects as overengineering.
+
+**Manifest consequence (ADR-011):** `spec.preset` (optional) and `spec.sizeEnvelope.minChainBytes` (required) are added to the manifest contract. Both are additive; `schemaVersion` stays at 1.
+
+**Confidence:** ~96%.

@@ -68,12 +68,32 @@ type Spec struct {
 	Seeded          bool     `json:"seeded"`
 	SubjectAltNames []string `json:"subjectAltNames"`
 	SizeEnvelope    Envelope `json:"sizeEnvelope"`
+	// Preset names the shipped preset this run came from, absent when the
+	// request was assembled from flags alone. Presets are versioned data, so
+	// recording which version produced a fixture set keeps an old CI run
+	// interpretable after the preset itself has moved on (design-dossier §10).
+	Preset *PresetRef `json:"preset,omitempty"`
+}
+
+// PresetRef identifies the preset a run was generated from.
+type PresetRef struct {
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+	// Modified reports that a flag overrode something the preset specified, so
+	// this run is attributed to the preset but is not what the preset alone
+	// would have produced.
+	Modified bool `json:"modified"`
 }
 
 // Envelope is the AlgorithmProfile's expected raw sizes for this run.
 type Envelope struct {
 	PublicKeyBytes int `json:"publicKeyBytes"`
 	SignatureBytes int `json:"signatureBytes"`
+	// MinChainBytes is the smallest total DER certificate-chain size this
+	// request can produce: every certificate carries at least its own
+	// signature and public key, so chainDepth x (signature + public key) is a
+	// floor. gen asserts the real output against it.
+	MinChainBytes int `json:"minChainBytes"`
 }
 
 // Artifact is one generated file.

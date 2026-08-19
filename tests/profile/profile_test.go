@@ -109,3 +109,25 @@ func TestSignatureIDsExcludeKEMs(t *testing.T) {
 		t.Error("SignatureIDs should be a strict subset of IDs (the registry has KEMs)")
 	}
 }
+
+// TestMinChainBytesIsAFloorNotAnEstimate: the worst-case presets promise a
+// number of bytes, and that number has to come from the standards' own sizes
+// rather than from a measurement someone took once.
+func TestMinChainBytesIsAFloorNotAnEstimate(t *testing.T) {
+	p, err := profile.Lookup("slh-dsa-sha2-256f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := p.MinChainBytes(3), 3*(49856+64); got != want {
+		t.Errorf("MinChainBytes(3) = %d, want %d", got, want)
+	}
+	if got := p.MinChainBytes(0); got != 0 {
+		t.Errorf("MinChainBytes(0) = %d, want 0", got)
+	}
+	// A floor must never exceed what a real certificate of that algorithm
+	// occupies: a certificate embeds its signature and its public key whole.
+	if p.MinChainBytes(1) > 50249 {
+		t.Errorf("MinChainBytes(1) = %d, above the %d bytes a real SLH-DSA certificate measures",
+			p.MinChainBytes(1), 50249)
+	}
+}
