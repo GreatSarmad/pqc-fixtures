@@ -21,7 +21,7 @@ Project conventions:
 
 ## Stage 1 — ship v1 (months 1–4)
 
-- [ ] **F3 ML-KEM artifacts:** ML-KEM-512/768/1024 keys, raw/DER/PEM, hybrid-context bundle, `--seed` support (ADR-002).
+- [ ] **F3 ML-KEM artifacts:** ML-KEM-512/768/1024 keys, raw/DER/PEM, hybrid-context bundle, `--seed` support (ADR-002). *Audit note (2026-08-19): the anticipatory public-key surface — `engine.PublicKey`, manifest kind `publicKey` and its schema enum value — was removed as dead code; reintroduce it here, with tests, when the first bare-key artifact needs it.*
 - [ ] **F4 serve:** spike `s_server` flag coverage first (ADR-005), then `pqc-fixtures serve` presenting any generated chain; dossier criterion 7.
 - [ ] **F5 GitHub Action + SARIF:** thin wrapper repo, probe runner, SARIF 2.1.0 output; dossier criterion 8. Marketplace listing requires maintainer approval.
 - [ ] **F6 format matrix:** PKCS#12 bundles; oversized ML-DSA JWTs; unknown-critical-extension certs.

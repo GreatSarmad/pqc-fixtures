@@ -488,8 +488,8 @@ func checkDestination(outDir string, force bool) error {
 		return fmt.Errorf("%s is not empty and does not contain %s, so it was not produced by pqc-fixtures; "+
 			"refusing to replace it even with --force", outDir, manifest.FileName)
 	}
-	man, err := manifest.Load(filepath.Join(outDir, manifest.FileName))
-	if err != nil || man.Tool.Name != "pqc-fixtures" {
+	generator, err := manifest.GeneratedBy(filepath.Join(outDir, manifest.FileName))
+	if err != nil || generator != manifest.ToolName {
 		return fmt.Errorf("%s contains a %s that pqc-fixtures did not write; refusing to replace it",
 			outDir, manifest.FileName)
 	}
@@ -528,7 +528,7 @@ func buildManifest(spec *Spec, plan []PlannedCertificate, facts []certFacts, eng
 	man := &manifest.Manifest{
 		SchemaVersion: manifest.SchemaVersion,
 		Warning:       manifest.Warning,
-		Tool:          manifest.Tool{Name: "pqc-fixtures", Version: ToolVersion},
+		Tool:          manifest.Tool{Name: manifest.ToolName, Version: ToolVersion},
 		Engine: manifest.Engine{
 			Name:          "openssl",
 			Version:       engineVersion,

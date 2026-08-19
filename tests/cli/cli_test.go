@@ -395,3 +395,32 @@ func TestGenRejectsUnknownPreset(t *testing.T) {
 		t.Errorf("stderr does not name the problem:\n%s", stderr)
 	}
 }
+
+// TestGenPresetRetypedValuesAreNotOverrides: typing a preset's own values back
+// at it is agreement, not modification - no warning, and the manifest must not
+// record a modified preset, because downstream consumers key provenance on
+// that bit. Values are spelled differently wherever the CLI tolerates it, so
+// the comparison is semantic, not textual.
+func TestGenPresetRetypedValuesAreNotOverrides(t *testing.T) {
+	eng := testengine.Locate(t)
+	t.Setenv(engine.EnvOverride, eng.Path)
+
+	outDir := filepath.Join(t.TempDir(), "testdata")
+	code, _, stderr := run("gen", "--preset", "deep-chain",
+		"--chain", "10", "--algo", "ML-DSA-87", "--formats", "der,pem", "--days", "30",
+		"--out", outDir, "--quiet")
+	if code != 0 {
+		t.Fatalf("exit code = %d (stderr: %s)", code, stderr)
+	}
+	if strings.Contains(stderr, "warning:") {
+		t.Errorf("retyping the preset's own values warned:\n%s", stderr)
+	}
+
+	man, err := manifest.Load(filepath.Join(outDir, manifest.FileName))
+	if err != nil {
+		t.Fatalf("loading manifest: %v", err)
+	}
+	if man.Spec.Preset == nil || man.Spec.Preset.Modified {
+		t.Errorf("manifest preset = %+v, want deep-chain recorded as unmodified", man.Spec.Preset)
+	}
+}

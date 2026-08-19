@@ -150,6 +150,15 @@ Low-confidence design choices are documented for review rather than silently bec
 
 Everything else in ADR-007 is unchanged. **Tags, releases, package publication, registrations, and public posts remain the founder's alone** — this amendment covers pushing already-reviewed commits to the default branch, nothing more. A push that cannot satisfy every condition above is a founder action item, not a judgement call.
 
+### ADR-011 amendment: manifest fields are additive-and-optional within a schemaVersion
+
+**2026-08-19, prompted by the codebase audit (findings M2/M3).** Two rules operationalize "changeable only by bumping `manifest.schemaVersion`":
+
+1. **A field added while `schemaVersion` stays constant is optional in the published schema**, even when every new manifest writes it. Making it required disowns manifests written by earlier releases of the same schemaVersion — the audit caught exactly this: `sizeEnvelope.minChainBytes` briefly shipped as required, which invalidated v0.0.1 manifests against the current schema.
+2. **Ownership probing is lenient across versions.** `--force`'s "did pqc-fixtures write this directory?" check reads only `tool.name` and tolerates unknown fields (`manifest.GeneratedBy`); strict decoding (`manifest.Load`, `DisallowUnknownFields`) is reserved for consumers of the full current format. An older binary must recognize a newer binary's output as pqc-fixtures' own, or fixture directories stop being replaceable across upgrades.
+
+Removing or renaming a field, changing a field's meaning, or promoting an optional field to required remains a breaking change requiring a `schemaVersion` bump. `tests/manifest` encodes both rules as regression tests.
+
 ### ADR-006 amendment: registry names are claimed by shipping, not before
 
 **Decided by the founder, 2026-08-12**, superseding this ADR's original "register the npm and PyPI names at slice launch, before any public post."

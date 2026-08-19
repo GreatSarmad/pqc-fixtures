@@ -68,8 +68,13 @@ jobs:
         if: steps.engine-cache.outputs.cache-hit != 'true'
         run: scripts/build-openssl.sh --out dist/engine
 
+      # Pass the pinned version explicitly so a stale or corrupt cache entry
+      # restoring the wrong engine fails here, before the acceptance tests run
+      # against it (release.yml asserts the same way).
       - name: Verify engine
-        run: scripts/verify-openssl.sh dist/engine/openssl
+        run: |
+          scripts/verify-openssl.sh dist/engine/openssl \
+            "$(sed -n 's/^OPENSSL_VERSION=//p' scripts/openssl-pin.env)"
 
       - name: Run the engine-backed acceptance tests
         run: make test-engine

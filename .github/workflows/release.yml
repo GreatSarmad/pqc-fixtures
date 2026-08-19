@@ -92,8 +92,10 @@ jobs:
           tar -C dist/stage -czf "dist/out/${name}.tar.gz" .
           ( cd dist/out && shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256" )
 
-      # Smoke-test what actually ships, not what was built: unpack the archive
-      # and make the CLI find its own engine.
+      # Smoke-test what actually ships, not what was built: unpack the archive,
+      # make the CLI find its own engine, and generate real fixtures with it -
+      # the primary command has to work from the shipped layout, flag path and
+      # preset path both.
       - name: Smoke-test the archive
         run: |
           set -eu
@@ -107,6 +109,10 @@ jobs:
           dist/smoke/pqc-fixtures engine
           dist/smoke/pqc-fixtures engine | grep -q "version: ${{ steps.pin.outputs.OPENSSL_VERSION }}"
           dist/smoke/pqc-fixtures engine | grep -q "source:  bundled"
+          dist/smoke/pqc-fixtures gen --algo ml-dsa-44 --chain 1 --out "$RUNNER_TEMP/smoke-gen" --quiet
+          test -f "$RUNNER_TEMP/smoke-gen/manifest.json"
+          dist/smoke/pqc-fixtures gen --preset jumbo --out "$RUNNER_TEMP/smoke-jumbo" --quiet
+          test -f "$RUNNER_TEMP/smoke-jumbo/manifest.json"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -8,7 +8,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/GreatSarmad/pqc-fixtures/src/engine"
 	"github.com/GreatSarmad/pqc-fixtures/src/gen"
@@ -164,8 +168,20 @@ func genCommand(args []string, stdout, stderr io.Writer, locate func() (*engine.
 	if *quiet {
 		progress = nil
 	}
-	result, err := gen.Generate(context.Background(), spec, eng, progress)
+
+	// Ctrl-C must behave like any other failure: cancelling the context kills
+	// the engine subprocess, the error path runs, and the staged directory is
+	// removed instead of surviving beside the destination (design-dossier §9,
+	// atomic output - the promise has to hold for interrupts too).
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	result, err := gen.Generate(ctx, spec, eng, progress)
 	if err != nil {
+		if ctx.Err() != nil {
+			fmt.Fprintln(stderr, "pqc-fixtures gen: interrupted; the staged output was discarded and nothing was written")
+			return 1
+		}
 		fmt.Fprintf(stderr, "pqc-fixtures gen: %v\n", err)
 		return 1
 	}
@@ -253,21 +269,37 @@ func applyPreset(opts *gen.Options, name string, explicit map[string]bool) ([]st
 	}
 
 	var overridden []string
-	take := func(flagName string, specified bool, assign func()) {
+	take := func(flagName string, specified, sameAsPreset bool, assign func()) {
 		if !specified {
 			return
 		}
-		if explicit[flagName] {
-			overridden = append(overridden, "--"+flagName)
+		if !explicit[flagName] {
+			assign()
 			return
 		}
-		assign()
+		// A typed flag wins, but it counts as an override only when it changes
+		// what the preset specified. Retyping the preset's own value is
+		// agreement, not modification: the manifest's modified bit is contract
+		// data, and stamping it on identical output would be false.
+		if !sameAsPreset {
+			overridden = append(overridden, "--"+flagName)
+		}
 	}
-	take("algo", p.Spec.Algorithm != "", func() { opts.Algorithm = p.Spec.Algorithm })
-	take("chain", p.Spec.ChainDepth > 0, func() { opts.ChainDepth = p.Spec.ChainDepth })
-	take("days", p.Spec.ValidityDays > 0, func() { opts.ValidityDays = p.Spec.ValidityDays })
-	take("formats", p.Spec.Formats != "", func() { opts.Formats = p.Spec.Formats })
-	take("sans", len(p.Spec.SubjectAltNames) > 0, func() { opts.SANs = p.Spec.SubjectAltNames })
+	take("algo", p.Spec.Algorithm != "",
+		strings.EqualFold(strings.TrimSpace(opts.Algorithm), p.Spec.Algorithm),
+		func() { opts.Algorithm = p.Spec.Algorithm })
+	take("chain", p.Spec.ChainDepth > 0,
+		opts.ChainDepth == p.Spec.ChainDepth,
+		func() { opts.ChainDepth = p.Spec.ChainDepth })
+	take("days", p.Spec.ValidityDays > 0,
+		opts.ValidityDays == p.Spec.ValidityDays,
+		func() { opts.ValidityDays = p.Spec.ValidityDays })
+	take("formats", p.Spec.Formats != "",
+		formatSet(opts.Formats) == formatSet(p.Spec.Formats),
+		func() { opts.Formats = p.Spec.Formats })
+	take("sans", len(p.Spec.SubjectAltNames) > 0,
+		slices.Equal(opts.SANs, p.Spec.SubjectAltNames),
+		func() { opts.SANs = p.Spec.SubjectAltNames })
 
 	opts.PresetName = p.Name
 	opts.PresetVersion = p.Version
@@ -279,6 +311,24 @@ func applyPreset(opts *gen.Options, name string, explicit map[string]bool) ([]st
 			strings.Join(overridden, " and "), p.Name, p.Name))
 	}
 	return notes, nil
+}
+
+// formatSet normalizes a --formats value for equality checks: "DER , pem" and
+// "pem,der" request the same encodings. Resolution proper stays in
+// gen.Resolve; this only answers "did the flag change anything".
+func formatSet(raw string) string {
+	seen := map[string]bool{}
+	for _, f := range strings.Split(raw, ",") {
+		if f = strings.ToLower(strings.TrimSpace(f)); f != "" {
+			seen[f] = true
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return strings.Join(keys, ",")
 }
 
 const presetsUsage = `pqc-fixtures presets - worst-case fixture specifications

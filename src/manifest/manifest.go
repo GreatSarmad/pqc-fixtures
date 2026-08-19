@@ -23,6 +23,10 @@ const SchemaVersion = 1
 // FileName is the manifest's filename inside an output directory.
 const FileName = "manifest.json"
 
+// ToolName is stamped into every manifest as tool.name. Ownership checks
+// (gen's --force) compare against it.
+const ToolName = "pqc-fixtures"
+
 // Warning is stamped into every manifest. Anything reading a manifest sees, in
 // its own data, that the artifacts are not safe for any real use.
 const Warning = "INSECURE TEST FIXTURES. Every key and certificate listed here is generated for " +
@@ -108,10 +112,10 @@ type Artifact struct {
 	Certificate *CertDetail `json:"certificate,omitempty"`
 }
 
-// Artifact kinds.
+// Artifact kinds. gen emits private keys and certificates only; a public-key
+// kind returns with F3's bare ML-KEM artifacts.
 const (
 	KindPrivateKey  = "privateKey"
-	KindPublicKey   = "publicKey"
 	KindCertificate = "certificate"
 	KindChain       = "chain"
 	KindNotice      = "notice"
@@ -167,7 +171,33 @@ func (m *Manifest) WriteFile(path string) error {
 	return nil
 }
 
-// Load reads and decodes a manifest.
+// GeneratedBy reads only the generating tool's name from a manifest file,
+// tolerating fields this build does not know about. The ownership question -
+// "did pqc-fixtures write this directory?" - must be answerable across
+// versions: fields are added to the manifest over time and stay additive
+// within a schemaVersion (ADR-011), so a strict decode here would make an
+// older binary disown a directory a newer binary wrote and wrongly refuse to
+// --force-replace it. Load below stays strict for consumers of the full
+// format.
+func GeneratedBy(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var probe struct {
+		Tool struct {
+			Name string `json:"name"`
+		} `json:"tool"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return "", fmt.Errorf("decoding %s: %w", path, err)
+	}
+	return probe.Tool.Name, nil
+}
+
+// Load reads and decodes a manifest. It rejects unknown fields: a document
+// with fields this build does not know is not one this build can faithfully
+// consume. For the looser "is this ours at all" question, use GeneratedBy.
 func Load(path string) (*Manifest, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

@@ -142,12 +142,6 @@ func (e *Engine) ConvertKey(ctx context.Context, pemPath, derPath string) error 
 	return err
 }
 
-// PublicKey writes the SubjectPublicKeyInfo of a private key as PEM.
-func (e *Engine) PublicKey(ctx context.Context, keyPath, outPath string) error {
-	_, err := e.run(ctx, "pkey", "-in", keyPath, "-pubout", "-out", outPath)
-	return err
-}
-
 // VerifyChain runs `openssl verify` with an explicit trust anchor - the
 // generated root, never a system store. It is the executable form of
 // design-dossier §8 criterion 2.

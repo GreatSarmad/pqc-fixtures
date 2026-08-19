@@ -169,3 +169,57 @@ func TestWarningIsLoud(t *testing.T) {
 		t.Errorf("manifest warning %q does not say the fixtures are insecure", manifest.Warning)
 	}
 }
+
+// TestGeneratedByToleratesUnknownFields: the ownership probe must answer "did
+// pqc-fixtures write this?" across versions, so a manifest carrying fields
+// this build has never heard of still identifies its tool - while the strict
+// Load correctly refuses the same document.
+func TestGeneratedByToleratesUnknownFields(t *testing.T) {
+	future := `{"schemaVersion":1,"tool":{"name":"pqc-fixtures","version":"v9.9.9","futureToolField":true},` +
+		`"spec":{"futureSpecField":{"nested":[1,2,3]}},"futureTopLevel":"x"}`
+	path := filepath.Join(t.TempDir(), manifest.FileName)
+	if err := os.WriteFile(path, []byte(future), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	name, err := manifest.GeneratedBy(path)
+	if err != nil {
+		t.Fatalf("GeneratedBy: %v", err)
+	}
+	if name != manifest.ToolName {
+		t.Errorf("GeneratedBy = %q, want %q", name, manifest.ToolName)
+	}
+	if _, err := manifest.Load(path); err == nil {
+		t.Error("strict Load accepted a manifest with unknown fields; the lenient/strict division collapsed")
+	}
+
+	if _, err := manifest.GeneratedBy(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+		t.Error("GeneratedBy reported a tool name for a file that does not exist")
+	}
+}
+
+// TestSchemaAcceptsOlderManifests encodes the ADR-011 amendment: fields added
+// within a schemaVersion are optional in the published schema, so a manifest
+// written by an earlier release - v0.0.1 predates minChainBytes and preset -
+// still validates against the current schema.
+func TestSchemaAcceptsOlderManifests(t *testing.T) {
+	encoded, err := sample().Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(encoded, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	spec := doc["spec"].(map[string]any)
+	delete(spec, "preset")
+	delete(spec["sizeEnvelope"].(map[string]any), "minChainBytes")
+	older, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := schemacheck.Validate(manifest.Schema(), older); err != nil {
+		t.Errorf("a v0.0.1-shaped manifest no longer validates at schemaVersion %d:\n%v",
+			manifest.SchemaVersion, err)
+	}
+}

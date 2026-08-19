@@ -96,12 +96,12 @@
           "description": "Expected raw byte sizes from the AlgorithmProfile registry (FIPS 203/204/205).",
           "type": "object",
           "additionalProperties": false,
-          "required": ["publicKeyBytes", "signatureBytes", "minChainBytes"],
+          "required": ["publicKeyBytes", "signatureBytes"],
           "properties": {
             "publicKeyBytes": { "type": "integer", "minimum": 1 },
             "signatureBytes": { "type": "integer", "minimum": 1 },
             "minChainBytes": {
-              "description": "Smallest total DER certificate-chain size this request can produce: chainDepth x (signatureBytes + publicKeyBytes). gen asserts the real output against it.",
+              "description": "Smallest total DER certificate-chain size this request can produce: chainDepth x (signatureBytes + publicKeyBytes). gen asserts the real output against it. Optional: absent from manifests written by releases predating it (fields added within a schemaVersion stay optional, ADR-011); every current release writes it.",
               "type": "integer",
               "minimum": 1
             }
@@ -122,7 +122,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["privateKey", "publicKey", "certificate", "chain", "notice"]
+            "enum": ["privateKey", "certificate", "chain", "notice"]
           },
           "encoding": {
             "type": "string",

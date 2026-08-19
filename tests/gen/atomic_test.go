@@ -184,3 +184,63 @@ func assertNoStagingDirs(t *testing.T, parent string) {
 		}
 	}
 }
+
+// TestForceReplacesDirectoriesFromNewerVersions: a manifest as a future
+// release might write it - same schemaVersion, fields this build has never
+// heard of (additions stay optional within a schemaVersion, ADR-011). The
+// ownership check must still recognize the directory as pqc-fixtures' own
+// rather than refusing with "did not write".
+func TestForceReplacesDirectoriesFromNewerVersions(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "testdata")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	future := `{"schemaVersion":1,"warning":"INSECURE TEST FIXTURES","tool":{"name":"pqc-fixtures","version":"v9.9.9"},` +
+		`"engine":{"name":"openssl","version":"3.5.7","pinnedVersion":"3.5.7"},"generatedAt":"2027-01-01T00:00:00Z",` +
+		`"spec":{},"artifacts":[],"futureTopLevelField":{"nested":true}}`
+	if err := os.WriteFile(filepath.Join(outDir, manifest.FileName), []byte(future), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := gen.Generate(context.Background(),
+		resolveInto(t, outDir, func(o *gen.Options) { o.Force = true }),
+		&failingEngine{failAfterKeys: 0}, nil)
+	if err == nil {
+		t.Fatal("Generate succeeded with a failing engine")
+	}
+	if strings.Contains(err.Error(), "did not write") {
+		t.Errorf("a future release's manifest was disowned: %v", err)
+	}
+	if !errors.Is(err, errEngineExploded) {
+		t.Errorf("expected the run to reach the engine, got %v", err)
+	}
+}
+
+// contextAwareEngine blocks in keygen until its context is cancelled,
+// standing in for a long engine run that a user interrupts.
+type contextAwareEngine struct{ failingEngine }
+
+func (contextAwareEngine) GenerateKey(ctx context.Context, _ engine.KeyRequest) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// TestCanceledRunCleansUp: cancellation - the CLI wires Ctrl-C to context
+// cancellation - behaves like any other failure: no output directory, no
+// staging residue (design-dossier §9, atomic output).
+func TestCanceledRunCleansUp(t *testing.T) {
+	parent := t.TempDir()
+	outDir := filepath.Join(parent, "testdata")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := gen.Generate(ctx, resolveInto(t, outDir, nil), &contextAwareEngine{}, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Errorf("output directory exists after a cancelled run")
+	}
+	assertNoStagingDirs(t, parent)
+}
