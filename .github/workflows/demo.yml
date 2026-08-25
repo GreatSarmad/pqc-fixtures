@@ -1,0 +1,111 @@
+name: Demo probes
+
+# The demo's claims are measurements, so they have to be re-measured rather
+# than written down once. This workflow runs every probe against freshly
+# generated fixtures on a runner that actually has Java and PostgreSQL, and
+# uploads the transcript the blog post quotes from.
+#
+# A probe reporting a broken default exits non-zero by design; the job asserts
+# that the probes *ran*, not that they passed.
+
+on:
+  push:
+    paths:
+      - 'docs/demo/**'
+      - '.github/workflows/demo.yml'
+      - 'src/**'
+      - 'scripts/openssl-pin.env'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probes:
+    name: run the demo probes
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: probe
+          POSTGRES_DB: probe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: probe
+      PGDATABASE: probe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Cache the pinned engine
+        id: engine-cache
+        uses: actions/cache@v4
+        with:
+          path: dist/engine
+          key: engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/openssl-pin.env', 'scripts/build-openssl.sh') }}
+
+      - name: Build the pinned engine
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        run: make engine
+
+      - name: Verify the pinned engine
+        run: scripts/verify-openssl.sh dist/engine/openssl "$(sed -n 's/^OPENSSL_VERSION=//p' scripts/openssl-pin.env)"
+
+      - name: Build pqc-fixtures
+        run: make build
+
+      - name: Enable pgcrypto
+        run: psql -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pgcrypto;'
+
+      - name: Run the probes
+        run: |
+          set -o pipefail
+          docs/demo/run.sh "$RUNNER_TEMP/demo" 2>&1 | tee "$RUNNER_TEMP/demo-transcript.txt"
+
+      - name: Assert every runtime actually ran
+        run: |
+          set -eu
+          transcript="$RUNNER_TEMP/demo-transcript.txt"
+          # A silently skipped runtime would turn a red result table green by
+          # omission, which is the one failure mode this demo cannot have.
+          if grep -q 'SKIPPED' "$transcript"; then
+            echo "A probe was skipped on a runner that should have every runtime:" >&2
+            grep 'SKIPPED' "$transcript" >&2
+            exit 1
+          fi
+          for needed in 'Node — certificate forwarded' 'Node — terminating TLS' 'Java —' 'PostgreSQL —'; do
+            grep -qF "$needed" "$transcript" || { echo "missing section: $needed" >&2; exit 1; }
+          done
+          echo "every probe section ran"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-transcript
+          path: ${{ runner.temp }}/demo-transcript.txt
