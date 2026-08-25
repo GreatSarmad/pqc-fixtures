@@ -32,7 +32,7 @@ pqc-fixtures gen --algo ml-dsa-65 --chain 3 --out ./testdata
 ```
 
 ```
-generating 3-certificate ML-DSA-65 chain with OpenSSL 3.5.7
+generating 3-certificate ML-DSA-65 chain with OpenSSL 3.5.8
   [1/3] root             signature 3,309 B, public key 1,952 B
   [2/3] intermediate-1   signature 3,309 B, public key 1,952 B
   [3/3] leaf             signature 3,309 B, public key 1,952 B

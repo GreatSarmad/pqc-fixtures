@@ -18,7 +18,7 @@ import (
 // PinnedVersion is the OpenSSL version the release pipeline vendors. It is kept
 // in sync with scripts/openssl-pin.env, which is the single source of truth for
 // the build; tests/engine asserts the two agree.
-const PinnedVersion = "3.5.7"
+const PinnedVersion = "3.5.8"
 
 // EnvOverride names an explicit engine path, for development against a locally
 // built engine and for packagers who bundle the engine elsewhere.

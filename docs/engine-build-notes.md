@@ -11,6 +11,27 @@
 
 The pin lives in [`scripts/openssl-pin.env`](../scripts/openssl-pin.env) — one file, read by the build script, the release workflow, and a Go test that asserts it matches `engine.PinnedVersion`.
 
+## Pin history
+
+The version below is history: **the pin is now 3.5.8.** The build recipe,
+verification harness, and packaging in the rest of this document are unchanged
+by the bump — only the version and digest move.
+
+| Pinned | From | To | Why |
+|---|---|---|---|
+| 2026-07-27 | — | 3.5.7 | F0's initial pin: first 3.5.x with no unpatched High (CVE-2026-45447, heap UAF in `PKCS7_verify`). |
+| 2026-08-25 | 3.5.7 | 3.5.8 | Security release, bumped the day it shipped. Closes CVE-2026-63072 (heap buffer overflow, CMS key unwrapping), CVE-2026-75803 (AEAD forgeries with empty ciphertext via `EVP_Cipher`), the CMP issues CVE-2026-63073/63074/63076, CVE-2026-54874 (DTLS), CVE-2026-14457 (RPK), and the QUIC-server issues CVE-2026-18798/14456/63075. Most severe Moderate. |
+
+`openssl-3.5.8.tar.gz` (53,213,818 B) hashes to
+`a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2`, matching the
+upstream `openssl-3.5.8.tar.gz.sha256` release asset. Rebuilt and re-verified on
+macOS arm64 the same day: `verify-openssl.sh` passed all six assertions,
+`make test-engine` ran 87 tests with zero skips, and the three presets produced
+**byte-identical** chains to 3.5.7 — 50,309 B (`jumbo`), 76,079 B
+(`deep-chain`), 150,911 B (`worst-case-tls`). Sizes come from FIPS 203/204/205
+via `src/profile`, so a patch bump is not expected to move them; this run
+confirms it did not.
+
 ## Provenance
 
 ```
@@ -70,7 +91,7 @@ Run after every build and again on cache hits in the release workflow:
 5. End-to-end: generate an ML-DSA-65 key → self-signed cert (`TEST ONLY` subject, 30-day validity) → `openssl verify` succeeds.
 6. Seeded ML-DSA-65 keygen (`hexseed`, 32 bytes per the S1 spike) produces byte-identical keys across two runs — the property ADR-002 depends on.
 
-All six passed against the freshly built 3.5.7 engine.
+All six passed against the freshly built 3.5.7 engine, and again against 3.5.8 on the 2026-08-25 bump.
 
 ## Release layout
 
@@ -79,7 +100,7 @@ A release archive unpacks to:
 ```
 pqc-fixtures            # Go core
 engine/openssl          # vendored, pinned engine
-engine/ENGINE-VERSION   # "3.5.7"
+engine/ENGINE-VERSION   # the pinned version, e.g. "3.5.8"
 engine/LICENSE.txt      # OpenSSL's Apache-2.0 text, redistributed with it
 LICENSE                 # our MIT license
 THIRD-PARTY-NOTICES.md  # bundled-engine attribution and license pointer
@@ -102,7 +123,7 @@ $ ./loose-pqc engine
 pqc-fixtures: vendored OpenSSL engine not found at .../engine/openssl: ... no such file or directory
 
 The engine ships inside the release archive; unpack the whole archive rather than
-copying the binary out of it, or point PQC_FIXTURES_OPENSSL at an OpenSSL 3.5.7 build
+copying the binary out of it, or point PQC_FIXTURES_OPENSSL at an OpenSSL 3.5.8 build
 ```
 
 ## What is *not* verified
