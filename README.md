@@ -39,6 +39,7 @@ generating 3-certificate ML-DSA-65 chain with OpenSSL 3.5.8
   chain verifies against its own root
   chain is 16,928 B of DER across 3 certificates
 wrote 15 files to /path/to/testdata
+generated in 126ms
 ```
 
 The output directory contains, for each certificate in the chain, a private key
@@ -190,8 +191,9 @@ per file rather than per run.
 
 ## Security and licensing
 
-Please report security-sensitive findings through GitHub's private
-vulnerability reporting once the public repository is available.
+Please report security-sensitive findings through this repository's
+[private vulnerability reporting](https://github.com/GreatSarmad/pqc-fixtures/security/advisories/new)
+rather than a public issue.
 
 The Go project is licensed under the [MIT License](LICENSE). Release archives
 also contain a statically built OpenSSL engine under the Apache License 2.0;

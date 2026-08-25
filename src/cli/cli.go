@@ -4,7 +4,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/GreatSarmad/pqc-fixtures/src/engine"
 	"github.com/GreatSarmad/pqc-fixtures/src/gen"
@@ -100,9 +103,14 @@ Flags:
 // genCommand parses gen's flags and runs a generation.
 func genCommand(args []string, stdout, stderr io.Writer, locate func() (*engine.Engine, error)) int {
 	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	// flag writes both parse errors and usage to its output, and calls Usage
+	// before returning ErrHelp. Buffering both lets the caller decide where
+	// they land: an explicitly requested help is a successful run and belongs
+	// on stdout, a parse failure belongs on stderr.
+	var usageOut bytes.Buffer
+	fs.SetOutput(&usageOut)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, genUsage)
+		fmt.Fprint(&usageOut, genUsage)
 		fs.PrintDefaults()
 	}
 
@@ -119,6 +127,11 @@ func genCommand(args []string, stdout, stderr io.Writer, locate func() (*engine.
 		quiet      = fs.Bool("quiet", false, "suppress progress output")
 	)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprint(stdout, usageOut.String())
+			return 0
+		}
+		fmt.Fprint(stderr, usageOut.String())
 		return 2
 	}
 	if fs.NArg() > 0 {
@@ -146,13 +159,17 @@ func genCommand(args []string, stdout, stderr io.Writer, locate func() (*engine.
 		}
 	}
 
+	// Preset warnings precede resolution: a deprecated preset that also fails
+	// to resolve must still report the deprecation rather than dying silently
+	// on it.
+	for _, note := range presetNotes {
+		fmt.Fprintf(stderr, "warning: %s\n", note)
+	}
+
 	spec, err := gen.Resolve(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "pqc-fixtures gen: %v\n", err)
 		return 2
-	}
-	for _, note := range presetNotes {
-		fmt.Fprintf(stderr, "warning: %s\n", note)
 	}
 	for _, w := range spec.Warnings {
 		fmt.Fprintf(stderr, "warning: %s\n", w)
@@ -187,11 +204,11 @@ func genCommand(args []string, stdout, stderr io.Writer, locate func() (*engine.
 	}
 
 	if !*quiet {
+		fmt.Fprintf(stdout, "generated in %s\n", result.Duration.Round(time.Millisecond))
 		fmt.Fprintf(stdout, "\nThese are insecure test fixtures. They expire in %d days and must never\n"+
 			"be used to protect anything. Details: %s\n",
 			spec.ValidityDays, manifest.FileName)
 	}
-	_ = result
 	return 0
 }
 

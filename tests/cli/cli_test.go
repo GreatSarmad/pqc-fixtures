@@ -73,16 +73,41 @@ func TestSchemaCommandPrintsTheContract(t *testing.T) {
 }
 
 func TestGenHelp(t *testing.T) {
-	code, _, stderr := run("gen", "--help")
-	// flag.ContinueOnError reports -h as an error, which is the conventional
-	// "usage requested" path; what matters is that the flags are documented.
+	// An explicitly requested help is a successful run: usage on stdout,
+	// exit 0 — the same contract as the root command and `presets`. flag's
+	// ErrHelp is not a parse failure and must not be reported as one.
+	for _, flagName := range []string{"-h", "--help"} {
+		code, stdout, stderr := run("gen", flagName)
+		if code != 0 {
+			t.Errorf("%s: exit code = %d, want 0", flagName, code)
+		}
+		if stderr != "" {
+			t.Errorf("%s: wrote to stderr:\n%s", flagName, stderr)
+		}
+		for _, want := range []string{"--out", "-algo", "-chain", "-seed"} {
+			if !strings.Contains(stdout, strings.TrimPrefix(want, "-")) {
+				t.Errorf("%s: gen usage does not document %q:\n%s", flagName, want, stdout)
+			}
+		}
+	}
+}
+
+// TestGenBadFlagStillReportsUsageOnStderr guards the other half of the ErrHelp
+// split: a genuine parse failure keeps the diagnostic and the usage on stderr
+// with exit 2, so scripts can still tell the two apart.
+func TestGenBadFlagStillReportsUsageOnStderr(t *testing.T) {
+	code, stdout, stderr := run("gen", "--out", "x", "--nope")
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
-	for _, want := range []string{"--out", "-algo", "-chain", "-seed"} {
-		if !strings.Contains(stderr, strings.TrimPrefix(want, "-")) {
-			t.Errorf("gen usage does not document %q:\n%s", want, stderr)
-		}
+	if stdout != "" {
+		t.Errorf("parse failure wrote to stdout:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "nope") {
+		t.Errorf("stderr does not name the offending flag:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "algo") {
+		t.Errorf("stderr does not include usage:\n%s", stderr)
 	}
 }
 

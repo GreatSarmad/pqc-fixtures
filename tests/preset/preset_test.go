@@ -164,7 +164,7 @@ func TestDeepChainIsDeeperThanCommonLimits(t *testing.T) {
 	}
 }
 
-// TestSeedableAlgorithmsAreNotPromisedByNonSeedablePresets records the ADR-002
+// TestSLHDSAPresetsDoNotPromiseReproducibility records the ADR-002
 // consequence: the SLH-DSA presets can never be reproducible, so nothing in
 // their prose may claim otherwise.
 func TestSLHDSAPresetsDoNotPromiseReproducibility(t *testing.T) {
