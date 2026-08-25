@@ -107,5 +107,5 @@ copying the binary out of it, or point PQC_FIXTURES_OPENSSL at an OpenSSL 3.5.7 
 
 ## What is *not* verified
 
-- **macOS Gatekeeper.** An unsigned, un-notarized `engine/openssl` downloaded through a browser will be quarantined; `curl`/`brew`/`npx` installs are unaffected. Signing needs an Apple Developer account and remains a release prerequisite.
+- **macOS Gatekeeper.** An unsigned, un-notarized `engine/openssl` downloaded through a browser will be quarantined; `curl`/`brew`/`npx` installs are unaffected. Signing needs an Apple Developer account and is deliberately deferred — see ADR-013.
 - **Release signing / SBOM** (dossier §9) are not implemented; the workflow emits a `.sha256` per archive only.

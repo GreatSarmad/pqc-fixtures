@@ -190,3 +190,19 @@ Neither npm nor PyPI offers name reservation. Claiming `pqc-fixtures` on either 
 **Manifest consequence (ADR-011):** `spec.preset` (optional) and `spec.sizeEnvelope.minChainBytes` (required) are added to the manifest contract. Both are additive; `schemaVersion` stays at 1.
 
 **Confidence:** ~96%.
+
+## ADR-013: Defer Apple Developer Program enrolment; ship ad-hoc-signed macOS binaries
+
+**Decided by the founder, 2026-08-25**, superseding the "signing … remains a release prerequisite" framing previously carried in `docs/engine-build-notes.md`.
+
+**Decision:** macOS artefacts ship with only the ad-hoc signature the native toolchain already applies. No Apple Developer Program enrolment (USD 99/year), no Developer ID signing, and no notarisation step in `release.yml`, until there is evidence of users hitting Gatekeeper.
+
+**Rationale:**
+- Two requirements are routinely conflated. Apple Silicon refuses to execute an *unsigned* binary at all — but an **ad-hoc** signature satisfies that, and both the Go linker and clang apply one automatically when building natively on macOS, which ADR-008's per-platform native runners already do. Requirement met, no cost, no action.
+- **Notarisation** is enforced only against files carrying the `com.apple.quarantine` attribute. Browsers and Mail set it; `curl` does not — and Homebrew, npm, and pip all fetch through curl. Every documented install path is therefore unaffected by the missing notarisation.
+- The residual gap is a browser download straight from the GitHub Releases page: quarantined and unsigned, so Gatekeeper refuses it with "developer cannot be verified". The v0.0.1 release notes already carry the `xattr -dr com.apple.quarantine` workaround, and package-manager installs are documented as the primary path.
+- At Stage 0, with adoption unproven, the annual fee buys no measured benefit and the decision reverses cheaply.
+
+**Revisit when:** users report Gatekeeper blocks (issues, inbound mail), or direct Releases-page downloads become a primary install path — both visible in issues and release download counts. Practical note for that day: enrolment is not instant — the individual route is quick, while the organisation route requires a D-U-N-S number and takes materially longer, so decide which certificate identity is wanted before the need is urgent.
+
+**Confidence:** ~96%. The residual risk is the browser-download path: it degrades a first impression but blocks nobody who follows the documented install.
