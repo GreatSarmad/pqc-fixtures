@@ -1,9 +1,11 @@
 # DRAFT — blog post
 
-**Status:** draft. The Node numbers are measured and quotable. The Java and
-PostgreSQL sections are outlined but deliberately unwritten: their numbers come
-from the `demo.yml` transcript, and nothing goes in this post that a reader
-cannot reproduce with `docs/demo/run.sh`. Publishing is a founder action.
+**Status:** draft, with every number measured. Node was measured on macOS
+arm64 and reproduced on ubuntu-latest; Java (Temurin 21) and PostgreSQL 17 come
+from the `demo.yml` transcript. Nothing in this post is a number a reader
+cannot reproduce with `docs/demo/run.sh`. What remains is prose, the decision
+about a visual asset, and a fresh re-run on the day of publication.
+Publishing is a founder action.
 
 **Working title:** Your post-quantum certificate is 65× bigger. Here is what
 notices first.
@@ -37,7 +39,7 @@ SLH-DSA certificate — is easy to wave away as exotic. The smallest is not:
 > The server logs `HPE_HEADER_OVERFLOW`, the client gets `ECONNRESET`, and
 > nothing anywhere says the word "certificate".
 
-Then the size table, because it is the whole argument in six rows:
+Then the size table, because it is the whole argument in four rows:
 
 | Certificate | PEM | URL-escaped for a header |
 |---|---:|---:|
@@ -71,7 +73,7 @@ Then SLH-DSA: `ERR_SSL_UNKNOWN_CERTIFICATE_TYPE`, thrown by
 handshake; it fails to start. "Does your runtime support post-quantum
 certificates" turns out not to be one question.
 
-## Section 3 — Java (outlined; needs the CI transcript)
+## Section 3 — Java (measured on Temurin 21)
 
 Two defaults nobody reads before migrating:
 `jdk.tls.maxHandshakeMessageSize` (32,768 B, a budget the *whole chain*
@@ -79,19 +81,36 @@ shares) and the certificate-count limit that JDK 22 split in two —
 `jdk.tls.server.maxInboundCertificateChainLength` defaults to 8, the client one
 to 10. The server-side 8 is the mTLS direction.
 
-The `deep-chain` preset exists precisely for this: ten certificates, above the
-server-side default. Fill in the measured handshake-message sizes from the
-transcript before writing this section.
+| Chain | Certificates | Handshake message | vs 32,768 B | vs 8 certs |
+|---|---:|---:|---|---|
+| ML-DSA-65 (3) | 3 | 16,947 B | fits, 52% | fits |
+| worst-case-tls | 3 | 150,930 B | 461% | fits |
+| deep-chain | 10 | 76,133 B | 232% | exceeded |
 
-## Section 4 — PostgreSQL (outlined; needs the CI transcript)
+Lead with `deep-chain`: it breaks both limits at once and every certificate in
+it is individually unremarkable. Ten certificates is not an exotic chain, it is
+a chain with a couple of extra intermediates.
 
-Two failures, one boring and one interesting. The boring one: `varchar(4096)`,
-chosen years ago by someone who never measured a certificate, now too small by
-5×. The interesting one: btree's ~2,704-byte index row limit, which turns
-"index the certificate column" from a working migration into a failing one.
+Then the honest counterweight, which the post needs in order to be believed:
+JDK 21 *parsed* every chain, SLH-DSA included. Java's problem here is
+arithmetic, not algorithm support.
 
-The fix is a hash index on `digest(pem, 'sha256')`, which is worth showing —
-the post should leave readers with a change to make, not only a fear.
+## Section 4 — PostgreSQL (measured on 17)
+
+An ML-DSA-65 chain is 23,087 bytes. Two failures, one boring and one
+interesting.
+
+The boring one: `INSERT` into `varchar(4096)` → `value too long for type
+character varying(4096)`, 18,991 bytes over. Nobody chose 4096 by measuring a
+certificate; they chose it when every certificate they had was 1 KB.
+
+The interesting one: `CREATE INDEX` on a `text` column holding the chain →
+`index row requires 23104 bytes, maximum size is 8191`. Indexing a certificate
+column is a reasonable thing to have done, and it silently stops being
+possible.
+
+End with the fix, so readers leave with a change to make rather than only a
+fear: an index on `digest(pem, 'sha256')` is accepted.
 
 ## Closing
 
@@ -114,7 +133,7 @@ pqc-fixtures gen --preset worst-case-tls --out ./testdata
 
 - [ ] Re-run `docs/demo/run.sh` on the day of publication and re-quote every
       number; the pinned engine or Node may have moved.
-- [ ] Fill Sections 3 and 4 from the `demo.yml` transcript.
+- [x] Fill Sections 3 and 4 from the `demo.yml` transcript. *(done)*
 - [ ] Confirm the nginx / ALB / Envoy header names against current docs.
 - [ ] Decide whether the GIF is worth it. The transcript is legible as text,
       and a GIF that shows a connection reset is not visually interesting.

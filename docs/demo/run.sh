@@ -58,6 +58,22 @@ probe() {
   fi
 }
 
+# psql exits 0 under ON_ERROR_STOP=0 even when every statement was rejected,
+# so its exit status cannot be the verdict. The server's own ERROR lines can.
+run_postgres_probe() {
+  pg_output="$(psql -X -q -v ON_ERROR_STOP=0 \
+    -v chain="${work_dir}/ml-dsa-65/INSECURE-TEST-fullchain.pem" \
+    -f "${demo_dir}/probes/postgres-cert-column.sql" 2>&1)"
+  printf '%s\n' "${pg_output}"
+  if printf '%s' "${pg_output}" | grep -q 'ERROR:'; then
+    rejected="$(printf '%s' "${pg_output}" | grep -c 'ERROR:')"
+    printf '  RESULT              FAIL — PostgreSQL rejected %s statement(s)\n' "${rejected}"
+    return 1
+  fi
+  printf '  RESULT              PASS — every statement was accepted\n'
+  return 0
+}
+
 skipped() {
   printf '  SKIPPED             %s\n' "$1"
   skip=$((skip + 1))
@@ -132,9 +148,7 @@ elif ! pg_error="$(psql -X -q -t -c 'SELECT 1' 2>&1 >/dev/null)"; then
   skipped "psql cannot connect: $(printf '%s' "${pg_error}" | tr '\n' ' ')"
 else
   section "PostgreSQL — storing the certificate in a column"
-  probe "postgres" psql -X -q -v ON_ERROR_STOP=0 \
-    -v chain="${work_dir}/ml-dsa-65/INSECURE-TEST-fullchain.pem" \
-    -f "${demo_dir}/probes/postgres-cert-column.sql"
+  probe "postgres" run_postgres_probe
 fi
 
 section "Summary"

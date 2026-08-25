@@ -5,9 +5,10 @@
 --
 --   1. A hand-picked VARCHAR(n). Nobody measures a certificate before choosing
 --      n; 4096 is the folk default and comfortably fits anything RSA produces.
---   2. PostgreSQL's btree index row limit — about 2704 bytes, a third of a
---      page. Indexing a certificate column is common (dedupe, lookup by PEM)
---      and works fine until the certificates grow.
+--   2. PostgreSQL's btree index row limit. Indexing a certificate column is
+--      common (dedupe, lookup by PEM) and works fine until the certificates
+--      grow. Measured against PostgreSQL 17, a 23 KB chain is refused with
+--      "index row requires 23104 bytes, maximum size is 8191".
 --
 -- Run with:
 --   psql -X -v chain=/path/to/INSECURE-TEST-fullchain.pem -f postgres-cert-column.sql
@@ -38,8 +39,7 @@ CREATE TABLE pqc_probe_cert (
 SELECT
     length(:'chain_pem')        AS chain_bytes,
     4096                        AS varchar_limit,
-    length(:'chain_pem') - 4096 AS bytes_over_varchar,
-    2704                        AS btree_row_limit;
+    length(:'chain_pem') - 4096 AS bytes_over_varchar;
 
 \echo ''
 \echo '  1. INSERT into varchar(4096) — the folk default'
