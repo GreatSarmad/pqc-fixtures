@@ -10,33 +10,36 @@
 --      and works fine until the certificates grow.
 --
 -- Run with:
---   psql -v chain=/path/to/INSECURE-TEST-fullchain.pem -f postgres-cert-column.sql
+--   psql -X -v chain=/path/to/INSECURE-TEST-fullchain.pem -f postgres-cert-column.sql
 --
--- Every failing statement below is expected to fail. ON_ERROR_STOP must be off
--- so the script reports all of them rather than the first.
+-- Every statement below runs in its own implicit transaction, deliberately:
+-- inside one explicit BEGIN, the first expected failure would abort the
+-- transaction and every later statement would report "current transaction is
+-- aborted" instead of its own result. Each statement has to be allowed to fail
+-- on its own terms.
 
 \set ON_ERROR_STOP 0
-\set QUIET 1
 
-BEGIN;
+DROP TABLE IF EXISTS pqc_probe_cert;
 
-CREATE TEMPORARY TABLE pqc_probe_cert (
+CREATE TABLE pqc_probe_cert (
     id        serial PRIMARY KEY,
     -- The folk default: wide enough for any classical certificate.
     pem_4096  varchar(4096),
     -- What the column should have been all along.
     pem_text  text
-) ON COMMIT DROP;
+);
 
 -- Read the fixture chain into a psql variable. :chain is supplied with -v.
 \set chain_pem `cat :chain`
 
+\echo ''
 \echo '  measuring the chain'
 SELECT
-    length(:'chain_pem')                             AS chain_bytes,
-    4096                                             AS varchar_limit,
-    length(:'chain_pem') - 4096                      AS bytes_over_varchar,
-    2704                                             AS btree_row_limit;
+    length(:'chain_pem')        AS chain_bytes,
+    4096                        AS varchar_limit,
+    length(:'chain_pem') - 4096 AS bytes_over_varchar,
+    2704                        AS btree_row_limit;
 
 \echo ''
 \echo '  1. INSERT into varchar(4096) — the folk default'
@@ -63,7 +66,7 @@ SELECT
 FROM pqc_probe_cert
 ORDER BY id;
 
-COMMIT;
+DROP TABLE IF EXISTS pqc_probe_cert;
 
 \echo ''
 \echo '  Statements 1 and 3 are expected to fail on a post-quantum chain and to'

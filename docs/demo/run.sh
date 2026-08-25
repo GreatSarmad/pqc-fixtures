@@ -122,14 +122,19 @@ else
   skipped "no working java runtime (JDK 24+ needed for ML-DSA)"
 fi
 
-if command -v psql >/dev/null 2>&1 && psql -lqt >/dev/null 2>&1; then
+if ! command -v psql >/dev/null 2>&1; then
+  section "PostgreSQL"
+  skipped "psql is not installed"
+elif ! pg_error="$(psql -X -q -t -c 'SELECT 1' 2>&1 >/dev/null)"; then
+  # Report why, rather than "not reachable". A skip that hides its own cause
+  # is how a red result table quietly turns green.
+  section "PostgreSQL"
+  skipped "psql cannot connect: $(printf '%s' "${pg_error}" | tr '\n' ' ')"
+else
   section "PostgreSQL — storing the certificate in a column"
-  probe "postgres" psql -q -v ON_ERROR_STOP=0 \
+  probe "postgres" psql -X -q -v ON_ERROR_STOP=0 \
     -v chain="${work_dir}/ml-dsa-65/INSECURE-TEST-fullchain.pem" \
     -f "${demo_dir}/probes/postgres-cert-column.sql"
-else
-  section "PostgreSQL"
-  skipped "no reachable PostgreSQL (need psql and a running server)"
 fi
 
 section "Summary"
