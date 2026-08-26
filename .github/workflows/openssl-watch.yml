@@ -14,7 +14,7 @@ jobs:
     name: check OpenSSL 3.5.x pin
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compare the pin with upstream releases
         env:
