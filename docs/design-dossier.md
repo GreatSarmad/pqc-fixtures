@@ -28,13 +28,13 @@ The outcome is an *answer*, not artifacts. Artifacts are the mechanism.
 4. Something breaks visibly → they now know exactly what and why.
 5. Add the GitHub Action → the finding becomes a permanent CI gate.
 
-Steps 1–4 are the product's "aha" and its marketing. Step 5 is the monetization seam. Everything in v1 exists to make steps 1–4 frictionless.
+Steps 1–4 are the product's "aha". Everything in v1 exists to make them frictionless.
 
 ## 3. Explicit non-goals
 
 - **No cryptography of our own.** We orchestrate existing engines (OpenSSL 3.5+, later possibly liboqs/Bouncy Castle). Never implement or modify primitives.
 - **No discovery / inventory / CBOM scanning.** Saturated market (IBM CBOMkit, SandboxAQ, Keyfactor, existing solos). Explicit strategic exclusion.
-- **No static analysis / linter / codemod in v1.** (Idea B in the brief — possible later feature, not scope now.)
+- **No static analysis / linter / codemod in v1.** Possible later feature; out of scope now.
 - **No hosted SaaS, accounts, dashboards, or telemetry in v1.** Everything runs offline on the user's machine or CI runner.
 - **No QRNG or quantum-hardware integration, ever.** Credibility requirement, per the brief.
 - **Not a CA or PKI management product.** Artifacts are test-only by construction (see §9).
@@ -46,8 +46,8 @@ Steps 1–4 are the product's "aha" and its marketing. Step 5 is the monetizatio
 | # | Assumption | How it could be wrong | How we'd notice | Impact if wrong |
 |---|---|---|---|---|
 | A1 | OpenSSL 3.5+ CLI/API can emit all v1 artifacts (ML-DSA & SLH-DSA keys/certs/chains, ML-KEM keys) without an OQS fork | Some artifact (esp. anything composite/hybrid-certificate shaped) may need liboqs or Bouncy Castle | Spike in week 1: generate every v1 artifact by hand with stock OpenSSL 3.5 | Engine adapter gets a second implementation earlier than planned (§7 seam exists for this) |
-| A2 | *Realism matters*: users need valid, verifiable chains, not just big byte blobs | Maybe `head -c 50000 /dev/urandom` is 80% of the value | If demo feedback says "I just needed a big blob", product is over-built | Core shrinks; compliance-report tier (which depends on realism) weakens |
-| A3 | Bottom-up adoption works: devs install a security-adjacent CLI from HN/word-of-mouth | Security tooling adoption may be top-down in target orgs | Stage-0 star/inbound thresholds from the brief (~300 stars / 6–8 weeks) | Pivot per brief (idea B or E) |
+| A2 | *Realism matters*: users need valid, verifiable chains, not just big byte blobs | Maybe `head -c 50000 /dev/urandom` is 80% of the value | If demo feedback says "I just needed a big blob", product is over-built | Core shrinks; the readiness-evidence work, which depends on realism, weakens |
+| A3 | Bottom-up adoption works: developers install a security-adjacent CLI on a colleague's recommendation | Security tooling adoption may be top-down in target orgs | Inbound interest after the demo post — issues, questions, forks | Distribution emphasis shifts from developer channels to organisational ones |
 | A4 | Static artifact dumps (IETF-Hackathon repo) are not "good enough" — parameterization (your chain depth, SANs, formats) is the value | Teams may copy static artifacts once and never need generation | Users asking for "just publish the bundle" | Ship pre-generated bundles as a free artifact anyway (cheap hedge); CLI remains for CI freshness |
 | A5 | Composite/hybrid certificate formats keep churning through 2026–27 | They could stabilize fast | IETF LAMPS/TLS WG output | Feature flag graduates from experimental earlier — good problem |
 | A6 | GitHub Actions is the right first CI seam | Target orgs may be GitLab/Jenkins-heavy | Inbound requests | Core is CI-agnostic (exit codes + SARIF + manifest); Action is a thin wrapper, so a GitLab template is days, not weeks |
@@ -136,7 +136,7 @@ For the slice and v1; each is automatable in the project's own CI.
 | **Supply-chain scrutiny** (our audience is professionally paranoid) | Minimal dependencies; pinned + checksummed vendored engine build; signed releases (Sigstore or minisign); SBOM published per release |
 | **Bundled OpenSSL CVE burden** (if Q1 → bundle) | Track advisories; release pipeline can rebuild + republish within days; engine version stamped in every Manifest so users can audit exposure |
 | **Privacy / trust** | No telemetry, no network calls, ever, in the free tool; any future analytics strictly opt-in. This is a *feature* for this audience — state it prominently |
-| **Standards churn breaks presets** (HQC 2027, FN-DSA, nine new signature candidates, composite-vs-hybrid debates) | Presets are versioned data; deprecated presets warn but keep working; Manifest records preset + engine versions so old CI runs stay interpretable. Churn is also the paid tier's recurring-value argument |
+| **Standards churn breaks presets** (HQC 2027, FN-DSA, nine new signature candidates, composite-vs-hybrid debates) | Presets are versioned data; deprecated presets warn but keep working; Manifest records preset + engine versions so old CI runs stay interpretable. Churn is the reason this tooling keeps earning its place |
 | **Partial/corrupt generation** | Atomic output: write to temp dir, move into place only on success; non-zero exit + actionable diagnostics otherwise |
 | **Export control / legal** | One-time SECO + US EAR public-availability check before first release (A9) — maintainer task, on the release checklist |
 | **Name-squatting** | Register the chosen name on npm, PyPI, and a Homebrew tap at slice launch, before the HN post |
@@ -155,9 +155,7 @@ Effort in solo nights-and-weekends terms. Order F0→F5 is fixed; F6–F8 reorde
 | F5 | GitHub Action + SARIF | Marketplace-listed Action wrapping the CLI; probe runner | Criterion 8; listed on Marketplace | ~2 wks |
 | F6 | Format matrix | PKCS#12 bundles; oversized ML-DSA JWTs; certs with unknown-critical-extensions (documented breakage path) | Each format has a verify test + docs | 2–3 wks |
 | F7 | Composite/hybrid certs — `--experimental` | Second engine adapter impl if A1 demands (liboqs or Bouncy Castle) | Gated, instability documented | 3+ wks, **only on demand signal** |
-| F8 | Paid seam: `report` | Readiness-evidence export (HTML/PDF) built from Manifests + RunReports | Sample report exists; licensing gate designed | ~2 wks, Stage 2 |
-
-**Marketing checkpoints** (from the business plan, unchanged): demo post after F1; HN/r/netsec after F2; Marketplace push after F5; paid tier after F8.
+| F8 | `report` | Readiness-evidence export (HTML/PDF) built from Manifests + RunReports | Sample report exists | ~2 wks, Stage 2 |
 
 ---
 
@@ -167,7 +165,7 @@ Effort in solo nights-and-weekends terms. Order F0→F5 is fixed; F6–F8 reorde
 - Product = test-fixture generator + breakage simulation (idea A); CLI + GitHub Action; optional local test server.
 - Distribution targets: npm, PyPI, Homebrew; GitHub Marketplace.
 - Wrap existing engines; never implement crypto.
-- Open-core: MIT CLI free; paid CI tier + compliance report later.
+- The CLI is MIT-licensed and free.
 - Solo, nights-and-weekends feasible; no scanner, no QRNG, no quantum-hardware APIs.
 - Artifact scope: oversized ML-DSA/SLH-DSA certs, deep/composite chains, large ML-KEM keys, JWT/X.509-extension fixtures.
 - SARIF output for the Action.

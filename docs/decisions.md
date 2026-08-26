@@ -60,7 +60,7 @@ Publishing, registrations, public posts, and releases require explicit maintaine
 ## ADR-006: Naming, licensing, repo conventions
 
 - **Name:** `pqc-fixtures` — verified unclaimed on npm and PyPI as of 2026-07-27 (both registries 404). **Maintainer action:** register the npm and PyPI names at slice launch, before any public post. Homebrew distribution starts as a personal tap (no squatting risk).
-- **License:** MIT (per business plan; open-core).
+- **License:** MIT.
 - **Default branch:** `main` (repo's unborn `master` renamed before first commit).
 - **Go module path:** `github.com/GreatSarmad/pqc-fixtures`.
 

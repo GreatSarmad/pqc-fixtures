@@ -18,7 +18,7 @@ Project conventions:
 - [x] **Repository launch:** README + THIRD-PARTY-NOTICES; engine caching with verification; release archive compliance checks; safe development-build naming; weekly OpenSSL version watch; canonical Go module path; clean public history (ADR-009).
 - [x] **Demo assets:** draft blog post "watch a ~50 KB post-quantum cert break a default Node/Java/Postgres path" + reproduction scripts under `docs/demo/`. **Done 2026-08-25.** `docs/demo/run.sh` plus four probes; [`demo.yml`](.github/workflows/demo.yml) runs all of them on a runner with every runtime, fails if any probe is skipped, and uploads the transcript. Every claim is measured: an ML-DSA-65 *chain* (23,088 B PEM → 25,200 B escaped) overflows Node's 16,384 B default header budget as `HPE_HEADER_OVERFLOW` → `ECONNRESET`; Node refuses SLH-DSA at `tls.createSecureContext` while handshaking ML-DSA fine; Temurin 21 exceeds `jdk.tls.maxHandshakeMessageSize` at 461% (`worst-case-tls`) and 232% (`deep-chain`, which also exceeds the server-side 8-certificate cap); PostgreSQL 17 rejects the chain from `varchar(4096)` and from a btree index (`requires 23104 bytes, maximum size is 8191`), and accepts a `digest(pem,'sha256')` index. [POST-DRAFT.md](docs/demo/POST-DRAFT.md) is structured with all numbers filled in. **Remaining is founder-only:** writing the final prose, deciding the visual asset, and publishing (ADR-007).
 
-- [ ] **Release gate:** `v0.0.1` is published as a pre-release (2026-08-12). **`v0.0.3` is the release to cut (2026-08-26).** `v0.0.2` was tagged and built green on all three platforms, but was superseded before publication: a user-experience pass found that installing the CLI by symlinking it onto `PATH` — the ordinary way — broke on macOS, so the fix was folded in rather than shipping a release that would need replacing days later. Nothing was published under v0.0.2; the tag remains and points at a working build. `v0.0.3` carries the OpenSSL 3.5.8 security bump, the F2 presets, the symlink fix, and the README's first install section. Notes drafted at `dist/release/NOTES-v0.0.3.md`. The demo assets are done, so the gate's remaining steps are the tag and the post. *Stage-0 threshold: ~300 stars or clear inbound interest within 6–8 weeks.*
+- [ ] **Release gate:** `v0.0.1` is published as a pre-release (2026-08-12). **`v0.0.3` is the release to cut (2026-08-26).** `v0.0.2` was tagged and built green on all three platforms, but was superseded before publication: a user-experience pass found that installing the CLI by symlinking it onto `PATH` — the ordinary way — broke on macOS, so the fix was folded in rather than shipping a release that would need replacing days later. Nothing was published under v0.0.2; the tag remains and points at a working build. `v0.0.3` carries the OpenSSL 3.5.8 security bump, the F2 presets, the symlink fix, and the README's first install section. Notes drafted at `dist/release/NOTES-v0.0.3.md`. The demo assets are done, so the gate's remaining steps are the tag and the post.
 
 ## Stage 1 — ship v1 (months 1–4)
 
@@ -28,11 +28,10 @@ Project conventions:
 - [ ] **F6 format matrix:** PKCS#12 bundles; oversized ML-DSA JWTs; unknown-critical-extension certs.
 - [ ] Distribution wrappers: Homebrew tap formula, npm installer package, PyPI wheels (publishing requires maintainer approval).
 
-## Stage 2 — monetize (months 4–12, gated on Stage-0/1 signal)
+## Stage 2 — later (gated on demand signal)
 
-- [ ] **F7 composite/hybrid certificates** behind `--experimental` (needs second engine adapter; only on demand signal).
-- [ ] **F8 `report`:** readiness-evidence export (HTML/PDF) from Manifests + RunReports; licensing gate design.
-- [ ] Paid-tier mechanics, GitHub Sponsors, Einzelfirma registration (maintainer actions).
+- [ ] **F7 composite/hybrid certificates** behind `--experimental` (needs a second engine adapter; only on demand signal).
+- [ ] **F8 `report`:** readiness-evidence export (HTML/PDF) built from Manifests and RunReports.
 
 ## Maintenance
 
@@ -40,7 +39,6 @@ Project conventions:
 
 ## Watchlist (leading indicators that change plans)
 
-- IETF size-reduction work (Merkle Tree Certificates, cert compression) landing → shift emphasis to agility-regression testing (dossier "what would change the recommendation").
-- A funded player shipping a developer-first fixture CLI → pivot to codemod (idea B) or composite-cert generator (idea E).
+- IETF size-reduction work (Merkle Tree Certificates, certificate compression) landing → shift emphasis from size fixtures to agility-regression testing.
 - OpenSSL 3.5.x security advisories → patch-bump the vendored engine and re-release.
 - FN-DSA (FIPS 206) draft finalization; HQC standardization (2027); the nine round-3 signature candidates.
