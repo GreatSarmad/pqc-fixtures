@@ -19,7 +19,7 @@
 #
 # Output layout (consumed by src/engine and the release workflow):
 #   <out>/openssl          the engine executable
-#   <out>/ENGINE-VERSION   pinned version string, e.g. "3.5.7"
+#   <out>/ENGINE-VERSION   the pinned version string from openssl-pin.env
 #   <out>/LICENSE.txt      OpenSSL's Apache-2.0 license, redistributed with it
 
 set -euo pipefail

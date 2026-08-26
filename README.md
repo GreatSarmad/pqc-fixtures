@@ -12,7 +12,9 @@ assumptions that can break during a post-quantum migration.
 ## Project status
 
 This project is pre-release. Certificate-chain generation and the worst-case
-presets work; `v0.0.1` is the first tagged release.
+presets work; see [Releases](https://github.com/GreatSarmad/pqc-fixtures/releases)
+for the latest tagged build and always install the newest one — the bundled
+OpenSSL engine is patched there when upstream ships a security release.
 
 The CLI supports:
 

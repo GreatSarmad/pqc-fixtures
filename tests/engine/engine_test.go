@@ -32,6 +32,12 @@ func fakeEngine(t *testing.T, dir, versionOutput string) string {
 
 func noEnv(string) (string, bool) { return "", false }
 
+// The fake engines below deliberately report a version that is NOT the current
+// pin. Resolution and version parsing must work on whatever the engine on disk
+// says, so hardcoding the pinned version here would weaken the tests and force
+// an edit on every bump. Do not "fix" these to match engine.PinnedVersion —
+// TestPinnedVersionMatchesBuildPin is what guards the pin itself.
+
 func TestLocateFindsBundledEngine(t *testing.T) {
 	binDir := t.TempDir()
 	want := fakeEngine(t, binDir, "OpenSSL 3.5.7 9 Jun 2026")

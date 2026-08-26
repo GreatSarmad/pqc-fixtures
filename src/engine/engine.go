@@ -98,9 +98,10 @@ func executable(path string) error {
 	return nil
 }
 
-// Version runs `openssl version` and returns the bare version number, e.g.
-// "3.5.7". Every Manifest records this so users can audit their exposure to
-// engine CVEs (design-dossier §9).
+// Version runs `openssl version` and returns the bare version number — whatever
+// the engine on disk reports, which is not necessarily PinnedVersion. Every
+// Manifest records it so users can audit their exposure to engine CVEs
+// (design-dossier §9).
 func (e *Engine) Version(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, e.Path, "version")
 	// The engine must never pick up a system openssl.cnf: builds are pinned so
@@ -115,8 +116,10 @@ func (e *Engine) Version(ctx context.Context) (string, error) {
 	return parseVersion(stdout.String())
 }
 
-// parseVersion extracts the version number from an `openssl version` line such
-// as "OpenSSL 3.5.7 9 Jun 2026 (Library: OpenSSL 3.5.7 9 Jun 2026)".
+// parseVersion extracts the version number from an `openssl version` line of
+// the form "OpenSSL <version> <date>", optionally followed by a parenthesised
+// "(Library: ...)" clause. The version is read from the line, never assumed, so
+// this keeps working across pin bumps.
 func parseVersion(out string) (string, error) {
 	fields := strings.Fields(strings.TrimSpace(out))
 	if len(fields) < 2 || fields[0] != "OpenSSL" {
