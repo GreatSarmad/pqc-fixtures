@@ -50,7 +50,38 @@ func Locate() (*Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("determining executable path: %w", err)
 	}
-	return LocateIn(filepath.Dir(exe), os.LookupEnv)
+	return LocateForExecutable(exe, os.LookupEnv)
+}
+
+// LocateForExecutable resolves the engine for a given executable path.
+//
+// Putting the command on PATH with a symlink is the ordinary way to install a
+// CLI, and it has to keep working. os.Executable resolves symlinks on Linux
+// (/proc/self/exe) but not on macOS (_NSGetExecutablePath), so on macOS the
+// engine would otherwise be looked for beside the *link* instead of beside the
+// real binary, and every command would fail.
+//
+// The link's own directory is tried first, so a deliberately placed engine
+// beside the link still wins and existing layouts are unaffected.
+func LocateForExecutable(exe string, lookupEnv func(string) (string, bool)) (*Engine, error) {
+	dirs := []string{filepath.Dir(exe)}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		if dir := filepath.Dir(resolved); dir != dirs[0] {
+			dirs = append(dirs, dir)
+		}
+	}
+
+	var firstErr error
+	for _, dir := range dirs {
+		eng, err := LocateIn(dir, lookupEnv)
+		if err == nil {
+			return eng, nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	return nil, firstErr
 }
 
 // LocateIn is Locate against an explicit environment: binDir is the directory
@@ -71,10 +102,16 @@ func LocateIn(binDir string, lookupEnv func(string) (string, bool)) (*Engine, er
 
 	bundled := filepath.Join(binDir, dirName, binName)
 	if err := executable(bundled); err != nil {
-		return nil, fmt.Errorf("%w at %s: %v\n\nThe engine ships inside the release archive; "+
-			"unpack the whole archive rather than copying the binary out of it, "+
-			"or point %s at an OpenSSL %s build",
-			ErrNotFound, bundled, err, EnvOverride, PinnedVersion)
+		// Say what is missing and how to fix it, without guessing how the user
+		// got here. The old wording asserted they had copied the binary out of
+		// the archive, which was wrong for anyone whose engine had simply not
+		// been unpacked alongside it.
+		return nil, fmt.Errorf("%w at %s: %v\n\n"+
+			"pqc-fixtures ships the engine as an %s/ directory beside the binary, and "+
+			"needs both. Unpack the whole release archive and keep it together — a "+
+			"symlink to the binary from somewhere on your PATH is fine. Alternatively, "+
+			"point %s at an OpenSSL %s build",
+			ErrNotFound, bundled, err, dirName, EnvOverride, PinnedVersion)
 	}
 	abs, err := filepath.Abs(bundled)
 	if err != nil {

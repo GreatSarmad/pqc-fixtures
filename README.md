@@ -27,6 +27,45 @@ The CLI supports:
 ML-KEM key artifacts, `serve`, and the GitHub Action are not implemented yet.
 See [ROADMAP.md](ROADMAP.md) for the delivery sequence.
 
+## Install
+
+Download the archive for your platform from
+[Releases](https://github.com/GreatSarmad/pqc-fixtures/releases) and unpack it:
+
+```sh
+tar -xzf pqc-fixtures-<version>-<platform>.tar.gz -C ~/pqc-fixtures
+```
+
+The archive contains the CLI and an `engine/` directory holding the pinned
+OpenSSL build it shells out to. **Keep them together** — the CLI looks for its
+engine beside itself, and there is no fallback to a system OpenSSL, by design.
+
+To get the command on your `PATH`, either add that directory to `PATH` or
+symlink just the binary:
+
+```sh
+ln -s ~/pqc-fixtures/pqc-fixtures /usr/local/bin/pqc-fixtures
+```
+
+The symlink is fine — the engine is still found via the link's target. What
+does not work is copying `pqc-fixtures` out on its own and leaving `engine/`
+behind; that fails with an explicit error rather than silently using a
+different OpenSSL.
+
+Confirm the install:
+
+```sh
+pqc-fixtures engine     # prints the engine's path, version, and "source:  bundled"
+```
+
+On macOS, a browser download is quarantined by Gatekeeper and the binary is not
+yet notarised (see [ADR-013](docs/decisions.md)). Downloading with `curl`
+avoids this; if you used a browser, clear the attribute:
+
+```sh
+xattr -dr com.apple.quarantine pqc-fixtures engine
+```
+
 ## Generating fixtures
 
 ```sh
